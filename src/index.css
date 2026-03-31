@@ -907,6 +907,13 @@ body.compact-mode .topbar {
   flex-wrap: wrap;
 }
 
+.file-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .file-path-pill {
   padding: 8px 12px;
   border-radius: 999px;

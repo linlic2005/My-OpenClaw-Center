@@ -13,7 +13,7 @@ interface GatewayStore {
   connect: (url?: string) => Promise<void>;
   disconnect: () => void;
   reconnect: () => Promise<void>;
-  hydrate: () => void;
+  hydrate: () => Promise<void>;
   refreshAgents: () => Promise<void>;
 }
 
@@ -39,8 +39,9 @@ export const useGatewayStore = create<GatewayStore>((set, get) => ({
     set(gatewayService.getStateSnapshot());
     void get().refreshAgents();
   },
-  hydrate() {
+  async hydrate() {
     if (get().initialized) return;
+    await gatewayService.hydratePersistence();
     gatewayService.onStateChange((snapshot) => {
       set(snapshot);
     });

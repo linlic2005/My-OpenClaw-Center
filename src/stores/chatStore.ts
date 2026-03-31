@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import { chatService } from "../services/ChatService";
+import { persistenceService } from "../services/PersistenceService";
 import type { AppLanguage } from "../lib/i18n";
 import type { ChatMessage, Session } from "../types";
+
+const DRAFTS_KEY = "openclaw.chat.drafts";
 
 interface ChatStore {
   sessions: Session[];
@@ -15,7 +18,12 @@ interface ChatStore {
   createSession: () => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   setDraft: (sessionId: string, draft: string) => void;
-  sendMessage: (sessionId: string, content: string, mentions?: string[]) => Promise<void>;
+  sendMessage: (
+    sessionId: string,
+    content: string,
+    mentions?: string[],
+    replyTo?: string | null
+  ) => Promise<void>;
   retryMessage: (sessionId: string, messageId: string) => Promise<void>;
 }
 
@@ -52,11 +60,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     set({ loading: true });
     await chatService.bootstrap();
+    const drafts = await persistenceService.getJson<Record<string, string>>(DRAFTS_KEY, {});
 
     const currentSessionId = get().currentSessionId ?? get().sessions[0]?.id ?? null;
     if (currentSessionId) {
       await chatService.ensureHistoryLoaded(currentSessionId);
-      set({ currentSessionId });
+      set({ currentSessionId, drafts });
+    } else {
+      set({ drafts });
     }
 
     set({ loading: false });
@@ -82,13 +93,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     });
   },
   setDraft(sessionId, draft) {
-    set((state) => ({ drafts: { ...state.drafts, [sessionId]: draft } }));
+    set((state) => {
+      const nextDrafts = { ...state.drafts, [sessionId]: draft };
+      void persistenceService.setJson(DRAFTS_KEY, nextDrafts);
+      return { drafts: nextDrafts };
+    });
   },
-  async sendMessage(sessionId, content, mentions = []) {
-    await chatService.sendMessage(sessionId, content, mentions);
-    set((state) => ({
-      drafts: { ...state.drafts, [sessionId]: "" }
-    }));
+  async sendMessage(sessionId, content, mentions = [], replyTo = null) {
+    await chatService.sendMessage(sessionId, content, mentions, replyTo);
+    set((state) => {
+      const nextDrafts = { ...state.drafts, [sessionId]: "" };
+      void persistenceService.setJson(DRAFTS_KEY, nextDrafts);
+      return { drafts: nextDrafts };
+    });
   },
   async retryMessage(sessionId, messageId) {
     await chatService.retryMessage(sessionId, messageId);

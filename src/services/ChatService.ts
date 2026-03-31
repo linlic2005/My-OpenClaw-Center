@@ -1,6 +1,7 @@
 import type { AppLanguage } from "../lib/i18n";
 import { createId } from "../lib/utils";
 import { gatewayService } from "./GatewayService";
+import { persistenceService } from "./PersistenceService";
 import type { ChatMessage, MessageState, Session } from "../types";
 
 interface ChatSnapshot {
@@ -13,20 +14,25 @@ type ChatListener = (snapshot: ChatSnapshot) => void;
 const SESSION_STORAGE_KEY = "openclaw.chat.sessions";
 
 function cloneMessages(messages: Record<string, ChatMessage[]>): Record<string, ChatMessage[]> {
-  return Object.fromEntries(
-    Object.entries(messages).map(([sessionId, items]) => [sessionId, [...items]])
-  );
+  return Object.fromEntries(Object.entries(messages).map(([key, value]) => [key, [...value]]));
 }
 
-function normalizeSessionName(name: unknown, language: AppLanguage): string {
-  if (typeof name === "string" && name.trim()) return name;
+function fallbackSessionName(language: AppLanguage): string {
   return language === "zh-CN" ? "新会话" : "New Session";
+}
+
+function waitingSummary(language: AppLanguage): string {
+  return language === "zh-CN" ? "等待第一条消息" : "Waiting for the first message";
+}
+
+function remoteSessionName(language: AppLanguage): string {
+  return language === "zh-CN" ? "远程会话" : "Remote Session";
 }
 
 function createSessionSummary(content: string, language: AppLanguage): string {
   const stripped = content.replace(/\s+/g, " ").trim();
   if (stripped) return stripped.slice(0, 48);
-  return language === "zh-CN" ? "等待第一条消息" : "Waiting for the first message";
+  return waitingSummary(language);
 }
 
 function normalizeMessage(
@@ -51,9 +57,9 @@ class ChatService {
   private sessions: Session[] = [];
   private messages: Record<string, ChatMessage[]> = {};
   private listeners = new Set<ChatListener>();
+  private bootstrapped = false;
 
   constructor() {
-    this.sessions = this.loadSessions();
     this.bindGatewayEvents();
   }
 
@@ -75,6 +81,10 @@ class ChatService {
   }
 
   async bootstrap(): Promise<void> {
+    if (!this.bootstrapped) {
+      this.sessions = await persistenceService.getJson<Session[]>(SESSION_STORAGE_KEY, []);
+      this.bootstrapped = true;
+    }
     this.emit();
   }
 
@@ -87,8 +97,8 @@ class ChatService {
     this.messages[sessionId] = Array.isArray(payload.messages)
       ? payload.messages.map((message) => normalizeMessage(message, sessionId))
       : [];
-
     this.emit();
+
     return [...this.messages[sessionId]];
   }
 
@@ -100,17 +110,16 @@ class ChatService {
     const createdAt = Number(payload.createdAt ?? Date.now());
     const session: Session = {
       id: String(payload.sessionId ?? createId("sess")),
-      name: normalizeSessionName(payload.name ?? name, this.language),
-      summary: this.language === "zh-CN" ? "等待第一条消息" : "Waiting for the first message",
+      name: typeof payload.name === "string" && payload.name.trim() ? payload.name : name?.trim() || fallbackSessionName(this.language),
+      summary: waitingSummary(this.language),
       createdAt,
       updatedAt: createdAt
     };
 
     this.upsertSession(session);
     this.messages[session.id] = [];
-    this.saveSessions();
+    await this.saveSessions();
     this.emit();
-
     return session;
   }
 
@@ -118,17 +127,23 @@ class ChatService {
     await gatewayService.send("chat.delete_session", { sessionId });
     this.sessions = this.sessions.filter((session) => session.id !== sessionId);
     delete this.messages[sessionId];
-    this.saveSessions();
+    await this.saveSessions();
     this.emit();
   }
 
-  async sendMessage(sessionId: string, content: string, mentions: string[] = []): Promise<ChatMessage> {
+  async sendMessage(
+    sessionId: string,
+    content: string,
+    mentions: string[] = [],
+    replyTo: string | null = null
+  ): Promise<ChatMessage> {
     const optimistic: ChatMessage = {
       id: createId("msg"),
       sessionId,
       role: "user",
       content,
       mentions,
+      replyTo,
       timestamp: Date.now(),
       status: "sending"
     };
@@ -168,8 +183,12 @@ class ChatService {
       });
       this.touchSession(message.sessionId, message.content);
       this.emit();
-    } catch {
+    } catch (error) {
       this.updateMessage(message.sessionId, message.id, { status: "failed" });
+      void persistenceService.logError("chat", error, {
+        phase: "commitOutgoingMessage",
+        sessionId: message.sessionId
+      });
       this.emit();
     }
   }
@@ -182,47 +201,40 @@ class ChatService {
         if (!sessionId || !payload.message) return;
 
         const nextMessage = normalizeMessage(payload.message, sessionId);
-        const existing = this.messages[sessionId] ?? [];
-        if (existing.some((item) => item.id === nextMessage.id)) return;
+        const current = this.messages[sessionId] ?? [];
+        if (current.some((item) => item.id === nextMessage.id)) return;
 
-        this.messages[sessionId] = [...existing, nextMessage].sort(
-          (a, b) => a.timestamp - b.timestamp
-        );
+        this.messages[sessionId] = [...current, nextMessage].sort((a, b) => a.timestamp - b.timestamp);
         this.touchSession(sessionId, nextMessage.content);
         this.emit();
       }
     );
 
-    gatewayService.on<{
-      sessionId?: unknown;
-      messageId?: unknown;
-      updates?: Record<string, unknown>;
-    }>("chat.message_updated", ({ payload }) => {
-      const sessionId = String(payload.sessionId ?? "");
-      const messageId = String(payload.messageId ?? "");
-      if (!sessionId || !messageId || !payload.updates) return;
+    gatewayService.on<{ sessionId?: unknown; messageId?: unknown; updates?: Record<string, unknown> }>(
+      "chat.message_updated",
+      ({ payload }) => {
+        const sessionId = String(payload.sessionId ?? "");
+        const messageId = String(payload.messageId ?? "");
+        if (!sessionId || !messageId || !payload.updates) return;
 
-      this.updateMessage(sessionId, messageId, {
-        ...(payload.updates.status ? { status: String(payload.updates.status) as MessageState } : {})
-      });
-      this.emit();
-    });
+        this.updateMessage(sessionId, messageId, {
+          ...(payload.updates.status ? { status: String(payload.updates.status) as MessageState } : {})
+        });
+        this.emit();
+      }
+    );
   }
 
-  private updateMessage(
-    sessionId: string,
-    messageId: string,
-    updates: Partial<ChatMessage>
-  ): void {
+  private updateMessage(sessionId: string, messageId: string, updates: Partial<ChatMessage>): void {
     this.messages[sessionId] = (this.messages[sessionId] ?? []).map((message) =>
       message.id === messageId ? { ...message, ...updates } : message
     );
   }
 
   private upsertSession(session: Session): void {
-    const next = this.sessions.filter((item) => item.id !== session.id);
-    next.unshift(session);
-    this.sessions = next.sort((a, b) => b.updatedAt - a.updatedAt);
+    this.sessions = [...this.sessions.filter((item) => item.id !== session.id), session].sort(
+      (a, b) => b.updatedAt - a.updatedAt
+    );
   }
 
   private touchSession(sessionId: string, summarySource: string): void {
@@ -236,14 +248,14 @@ class ChatService {
         }
       : {
           id: sessionId,
-          name: this.language === "zh-CN" ? "远程会话" : "Remote Session",
+          name: remoteSessionName(this.language),
           summary: createSessionSummary(summarySource, this.language),
           updatedAt: now,
           createdAt: now
         };
 
     this.upsertSession(next);
-    this.saveSessions();
+    void this.saveSessions();
   }
 
   private emit(): void {
@@ -251,20 +263,8 @@ class ChatService {
     this.listeners.forEach((listener) => listener(snapshot));
   }
 
-  private loadSessions(): Session[] {
-    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
-    if (!raw) return [];
-
-    try {
-      const parsed = JSON.parse(raw) as Session[];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private saveSessions(): void {
-    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(this.sessions));
+  private async saveSessions(): Promise<void> {
+    await persistenceService.setJson(SESSION_STORAGE_KEY, this.sessions);
   }
 }
 

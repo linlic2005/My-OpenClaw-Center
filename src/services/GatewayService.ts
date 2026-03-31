@@ -1,4 +1,5 @@
 import { createId } from "../lib/utils";
+import { persistenceService } from "./PersistenceService";
 import type {
   AgentProfile,
   ConnectionStatus,
@@ -52,6 +53,8 @@ export class GatewayRequestError extends Error {
 const DEFAULT_URL = import.meta.env.VITE_WS_URL ?? "ws://192.168.123.115:18789";
 const MAX_RECONNECT_ATTEMPTS = 10;
 const HEARTBEAT_INTERVAL_MS = 30_000;
+const OFFLINE_QUEUE_KEY = "gateway.offlineQueue";
+const AUTH_TOKEN_KEY = "gateway.authToken";
 
 const iconMap: Record<string, string> = {
   code: "💻",
@@ -98,6 +101,8 @@ export class GatewayService {
   private pendingRequests = new Map<string, PendingRequest>();
   private offlineQueue: QueueEntry[] = [];
   private agentsCache: AgentProfile[] = [];
+  private persistenceHydrated = false;
+  private authToken: string | null = null;
 
   setUrl(url: string): void {
     const nextUrl = url.trim();
@@ -161,6 +166,7 @@ export class GatewayService {
 
   async connect(url = this.url): Promise<void> {
     this.setUrl(url);
+    await this.hydratePersistence();
 
     if (this.status === "connected") return;
     if (this.connectPromise) return this.connectPromise;
@@ -235,6 +241,42 @@ export class GatewayService {
     this.emitState("disconnected");
   }
 
+  async hydratePersistence(): Promise<void> {
+    if (this.persistenceHydrated) return;
+
+    try {
+      const [storedQueue, storedToken] = await Promise.all([
+        persistenceService.getJson<QueuedRequest[]>(OFFLINE_QUEUE_KEY, []),
+        persistenceService.getJson<string | null>(AUTH_TOKEN_KEY, null)
+      ]);
+
+      this.authToken = storedToken;
+      this.offlineQueue = storedQueue.map((item) => ({
+        ...item,
+        retries: Number(item.retries ?? 0),
+        resolve: () => undefined,
+        reject: () => undefined,
+        timeoutMs: 30_000
+      }));
+      this.persistenceHydrated = true;
+      this.emitState(this.status);
+    } catch (error) {
+      void persistenceService.logError("gateway", error, { phase: "hydratePersistence" });
+      this.persistenceHydrated = true;
+    }
+  }
+
+  async setAuthToken(token: string | null): Promise<void> {
+    this.authToken = token;
+    await persistenceService.setJson(AUTH_TOKEN_KEY, token);
+  }
+
+  async clearOfflineQueue(): Promise<void> {
+    this.offlineQueue = [];
+    await this.persistOfflineQueue();
+    this.emitState(this.status);
+  }
+
   async reconnect(): Promise<void> {
     this.manualDisconnect = false;
     this.stopHeartbeat();
@@ -271,6 +313,7 @@ export class GatewayService {
           resolve,
           reject
         });
+        void this.persistOfflineQueue();
         this.emitState(this.status);
       });
     }
@@ -418,6 +461,9 @@ export class GatewayService {
               response.payload
             )
           );
+          if (Number(response.code ?? 1) === 401) {
+            void this.setAuthToken(null);
+          }
         }
         return;
       }
@@ -433,6 +479,7 @@ export class GatewayService {
       }
     } catch (error) {
       console.error("Failed to parse gateway message", error);
+      void persistenceService.logError("gateway", error, { phase: "handleIncomingFrame" });
     }
   }
 
@@ -503,6 +550,7 @@ export class GatewayService {
       const item = this.offlineQueue.shift();
       if (!item) continue;
 
+      void this.persistOfflineQueue();
       this.emitState(this.status);
 
       try {
@@ -515,9 +563,31 @@ export class GatewayService {
         } else {
           item.reject(error);
         }
+        void persistenceService.logError("gateway", error, {
+          phase: "flushOfflineQueue",
+          requestType: item.type
+        });
+        void this.persistOfflineQueue();
         this.emitState(this.status);
         break;
       }
+    }
+  }
+
+  private async persistOfflineQueue(): Promise<void> {
+    try {
+      await persistenceService.setJson(
+        OFFLINE_QUEUE_KEY,
+        this.offlineQueue.map(({ id, type, payload, timestamp, retries }) => ({
+          id,
+          type,
+          payload,
+          timestamp,
+          retries
+        }))
+      );
+    } catch (error) {
+      void persistenceService.logError("gateway", error, { phase: "persistOfflineQueue" }, "warn");
     }
   }
 

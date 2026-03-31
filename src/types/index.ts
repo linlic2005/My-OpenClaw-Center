@@ -95,10 +95,31 @@ export interface UploadSession {
   totalChunks: number;
 }
 
+export interface DownloadSession {
+  downloadId: string;
+  fileName: string;
+  fileSize: number;
+  chunkSize: number;
+  totalChunks: number;
+}
+
+export interface DownloadTask {
+  id: string;
+  fileName: string;
+  progress: number;
+  status: "running" | "done" | "failed";
+}
+
 export interface ChannelConfig {
   id: string;
   name: string;
   tokenPreview: string;
+}
+
+export interface SkillPreference {
+  agentId: string;
+  installed: boolean;
+  enabled: boolean;
 }
 
 export interface SettingsState {
@@ -114,6 +135,7 @@ export interface SettingsState {
   offlineMode: boolean;
   studioEnabled: boolean;
   channels: ChannelConfig[];
+  skillPreferences: SkillPreference[];
 }
 
 export interface StudioAgentStatus {

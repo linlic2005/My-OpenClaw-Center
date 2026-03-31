@@ -12,15 +12,12 @@ interface ShellProps {
   children: ReactNode;
 }
 
-const tabLabels: Record<
-  ModuleTab,
-  { icon: string; label: Record<"zh-CN" | "en-US", string> }
-> = {
-  chat: { icon: "💬", label: { "zh-CN": "聊天", "en-US": "Chat" } },
-  kanban: { icon: "🗂️", label: { "zh-CN": "看板", "en-US": "Kanban" } },
-  files: { icon: "📁", label: { "zh-CN": "文件", "en-US": "Files" } },
-  studio: { icon: "🧪", label: { "zh-CN": "工作室", "en-US": "Studio" } },
-  settings: { icon: "⚙️", label: { "zh-CN": "设置", "en-US": "Settings" } }
+const tabLabels: Record<ModuleTab, { icon: string; label: Record<"zh-CN" | "en-US", string> }> = {
+  chat: { icon: "C", label: { "zh-CN": "聊天", "en-US": "Chat" } },
+  kanban: { icon: "K", label: { "zh-CN": "看板", "en-US": "Kanban" } },
+  files: { icon: "F", label: { "zh-CN": "文件", "en-US": "Files" } },
+  studio: { icon: "W", label: { "zh-CN": "工作室", "en-US": "Workspace" } },
+  settings: { icon: "S", label: { "zh-CN": "设置", "en-US": "Settings" } }
 };
 
 export function Shell({ activeTab, onTabChange, sidebar, children }: ShellProps) {
@@ -75,13 +72,13 @@ export function Shell({ activeTab, onTabChange, sidebar, children }: ShellProps)
               className={cn("tab-button", activeTab === tab && "tab-button-active")}
               onClick={() => onTabChange(tab)}
             >
-              <span>{tabLabels[tab].icon}</span>
+              <span className="tab-icon">{tabLabels[tab].icon}</span>
               {pickText(language, tabLabels[tab].label)}
             </button>
           ))}
         </nav>
 
-        <div className="topbar-user">👤</div>
+        <div className="topbar-user">LL</div>
       </header>
 
       <div className="workspace">

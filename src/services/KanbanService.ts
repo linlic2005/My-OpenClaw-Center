@@ -1,5 +1,6 @@
 import type { AppLanguage } from "../lib/i18n";
 import { gatewayService, GatewayRequestError } from "./GatewayService";
+import { persistenceService } from "./PersistenceService";
 import type { KanbanCard, KanbanColumn, KanbanLabel } from "../types";
 
 interface BoardSnapshot {
@@ -97,6 +98,15 @@ class KanbanService {
     return this.getSnapshot();
   }
 
+  async createCard(columnId: string, title: string, description = ""): Promise<void> {
+    await gatewayService.send("kanban.create_card", {
+      columnId,
+      title,
+      description
+    });
+    await this.getBoard();
+  }
+
   async moveCard(cardId: string, targetColumnId: string): Promise<void> {
     const card = this.cards.find((item) => item.id === cardId);
     if (!card) return;
@@ -155,8 +165,53 @@ class KanbanService {
       this.cards = this.cards.map((item) =>
         item.id === cardId ? { ...item, columnId: fromColumnId, syncStatus: "error" } : item
       );
+      void persistenceService.logError("kanban", error, {
+        phase: "moveCard",
+        cardId,
+        targetColumnId
+      });
       this.emit();
     }
+  }
+
+  async updateCard(
+    cardId: string,
+    updates: Partial<Pick<KanbanCard, "title" | "description" | "dueDate">>
+  ): Promise<void> {
+    const card = this.cards.find((item) => item.id === cardId);
+    if (!card) return;
+
+    await gatewayService.send("kanban.update_card", {
+      cardId,
+      updates: {
+        ...(updates.title !== undefined ? { title: updates.title } : {}),
+        ...(updates.description !== undefined ? { description: updates.description } : {}),
+        ...(updates.dueDate !== undefined
+          ? { dueDate: updates.dueDate ? new Date(updates.dueDate).getTime() : null }
+          : {})
+      },
+      version: card.version ?? Date.now()
+    });
+    await this.getBoard();
+  }
+
+  async deleteCard(cardId: string): Promise<void> {
+    await gatewayService.send("kanban.delete_card", { cardId });
+    this.cards = this.cards.filter((item) => item.id !== cardId);
+    this.emit();
+  }
+
+  async resolveConflict(
+    cardId: string,
+    resolution: "client" | "server" | "merge",
+    mergedState?: Partial<Pick<KanbanCard, "title" | "description">>
+  ): Promise<void> {
+    await gatewayService.send("kanban.resolve_conflict", {
+      cardId,
+      resolution,
+      ...(mergedState ? { mergedState } : {})
+    });
+    await this.getBoard();
   }
 
   private bindGatewayEvents(): void {

@@ -1,10 +1,24 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { pickText } from "../../lib/i18n";
 import { useGatewayStore } from "../../stores/gatewayStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 
 export function SettingsModule() {
-  const { settings, connectionTest, update, testConnection } = useSettingsStore();
+  const {
+    settings,
+    connectionTest,
+    update,
+    addChannel,
+    updateChannel,
+    removeChannel,
+    toggleSkillInstalled,
+    toggleSkillEnabled,
+    resetSettings,
+    exportDiagnostics,
+    clearErrorLogs,
+    clearOfflineQueue,
+    testConnection
+  } = useSettingsStore();
   const { agents, agentsLoading, refreshAgents, status } = useGatewayStore();
   const t = <T extends string>(copy: { "zh-CN": T; "en-US": T }) => pickText(settings.language, copy);
 
@@ -13,6 +27,11 @@ export function SettingsModule() {
       void refreshAgents();
     }
   }, [agents.length, refreshAgents, status]);
+
+  const skillPreferenceMap = useMemo(
+    () => Object.fromEntries(settings.skillPreferences.map((item) => [item.agentId, item])),
+    [settings.skillPreferences]
+  );
 
   return (
     <div className="settings-shell">
@@ -67,9 +86,8 @@ export function SettingsModule() {
                 {t({ "zh-CN": "连接测试成功", "en-US": "Connection looks good" })}
               </div>
               <div className="settings-status-meta">
-                Gateway {connectionTest.version} · {t({ "zh-CN": "延迟", "en-US": "Latency" })}{" "}
-                {connectionTest.latency}ms · {t({ "zh-CN": "在线连接", "en-US": "Active Clients" })}{" "}
-                {connectionTest.activeConnections}
+                Gateway {connectionTest.version} · {t({ "zh-CN": "延迟", "en-US": "Latency" })} {connectionTest.latency}ms ·{" "}
+                {t({ "zh-CN": "在线连接", "en-US": "Active Clients" })} {connectionTest.activeConnections}
               </div>
             </div>
           )}
@@ -222,11 +240,11 @@ export function SettingsModule() {
 
           <label className="switch-row settings-switch-card">
             <div>
-              <span className="settings-switch-title">{t({ "zh-CN": "启用工作室", "en-US": "Enable Workspace" })}</span>
+              <span className="settings-switch-title">{t({ "zh-CN": "启用工作室嵌入", "en-US": "Enable Workspace Embed" })}</span>
               <div className="settings-switch-copy">
                 {t({
-                  "zh-CN": "优先嵌入 Flask Studio 页面，不可用时回退到本地像素视图。",
-                  "en-US": "Embed the Flask Studio first and fall back to the local pixel view when needed."
+                  "zh-CN": "优先嵌入 Flask 工作室，不可用时回退到本地像素视图。",
+                  "en-US": "Embed the Flask workspace first and fall back to the local pixel view when needed."
                 })}
               </div>
             </div>
@@ -241,11 +259,55 @@ export function SettingsModule() {
         <section className="panel settings-panel">
           <div className="settings-card-head">
             <div>
-              <div className="panel-header-title">{t({ "zh-CN": "技能列表", "en-US": "Skills" })}</div>
+              <div className="panel-header-title">{t({ "zh-CN": "渠道管理", "en-US": "Channels" })}</div>
               <div className="settings-card-copy">
                 {t({
-                  "zh-CN": "展示 Gateway 当前返回的 Agent 能力列表。",
-                  "en-US": "Shows the agent capabilities currently reported by the Gateway."
+                  "zh-CN": "维护 Gateway 渠道名称与 token 显示信息。",
+                  "en-US": "Manage channel names and token previews used by the Gateway."
+                })}
+              </div>
+            </div>
+            <button className="ghost-button settings-action-button" onClick={addChannel}>
+              {t({ "zh-CN": "新增渠道", "en-US": "Add Channel" })}
+            </button>
+          </div>
+
+          <div className="settings-stack">
+            {settings.channels.map((channel) => (
+              <div key={channel.id} className="settings-item-card">
+                <div className="settings-inline-fields">
+                  <input
+                    className="text-input settings-input"
+                    value={channel.name}
+                    onChange={(event) => updateChannel(channel.id, { name: event.target.value })}
+                    placeholder={t({ "zh-CN": "渠道名称", "en-US": "Channel Name" })}
+                  />
+                  <input
+                    className="text-input settings-input"
+                    value={channel.tokenPreview}
+                    onChange={(event) => updateChannel(channel.id, { tokenPreview: event.target.value })}
+                    placeholder={t({ "zh-CN": "Token 预览", "en-US": "Token Preview" })}
+                  />
+                </div>
+                <div className="inline-actions">
+                  <span className="badge">{channel.id}</span>
+                  <button className="ghost-button danger" onClick={() => removeChannel(channel.id)}>
+                    {t({ "zh-CN": "删除", "en-US": "Remove" })}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel settings-panel">
+          <div className="settings-card-head">
+            <div>
+              <div className="panel-header-title">{t({ "zh-CN": "技能管理", "en-US": "Skills" })}</div>
+              <div className="settings-card-copy">
+                {t({
+                  "zh-CN": "基于 Gateway 返回的 Agent 列表进行本地安装与启停管理。",
+                  "en-US": "Manage local install and enable states for agents returned by the Gateway."
                 })}
               </div>
             </div>
@@ -262,23 +324,45 @@ export function SettingsModule() {
             )}
 
             {!agentsLoading &&
-              agents.map((agent) => (
-                <div key={agent.id} className="skill-card settings-skill-card">
-                  <div>
-                    <div className="list-title">
-                      {agent.icon} {agent.name}
+              agents.map((agent) => {
+                const preference = skillPreferenceMap[agent.id];
+                const installed = preference?.installed ?? agent.installed;
+                const enabled = preference?.enabled ?? agent.enabled;
+
+                return (
+                  <div key={agent.id} className="skill-card settings-skill-card settings-item-card">
+                    <div>
+                      <div className="list-title">
+                        {agent.icon} {agent.name}
+                      </div>
+                      <div className="list-meta">{agent.description}</div>
                     </div>
-                    <div className="list-meta">{agent.description}</div>
+                    <div className="inline-actions">
+                      <span className={`badge ${enabled ? "badge-success" : ""}`}>
+                        {installed
+                          ? enabled
+                            ? t({ "zh-CN": "已启用", "en-US": "Enabled" })
+                            : t({ "zh-CN": "已安装", "en-US": "Installed" })
+                          : t({ "zh-CN": "未安装", "en-US": "Not Installed" })}
+                      </span>
+                      <button className="ghost-button" onClick={() => toggleSkillInstalled(agent.id)}>
+                        {installed
+                          ? t({ "zh-CN": "卸载", "en-US": "Uninstall" })
+                          : t({ "zh-CN": "安装", "en-US": "Install" })}
+                      </button>
+                      <button
+                        className="ghost-button"
+                        onClick={() => toggleSkillEnabled(agent.id)}
+                        disabled={!installed}
+                      >
+                        {enabled
+                          ? t({ "zh-CN": "停用", "en-US": "Disable" })
+                          : t({ "zh-CN": "启用", "en-US": "Enable" })}
+                      </button>
+                    </div>
                   </div>
-                  <span className={`badge ${agent.enabled ? "badge-success" : ""}`}>
-                    {agent.installed
-                      ? agent.enabled
-                        ? t({ "zh-CN": "已启用", "en-US": "Enabled" })
-                        : t({ "zh-CN": "已安装", "en-US": "Installed" })
-                      : t({ "zh-CN": "可安装", "en-US": "Available" })}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
 
             {!agentsLoading && !agents.length && (
               <div className="empty-state small">
@@ -288,6 +372,35 @@ export function SettingsModule() {
                 })}
               </div>
             )}
+          </div>
+        </section>
+
+        <section className="panel settings-panel settings-panel-wide">
+          <div className="settings-card-head">
+            <div>
+              <div className="panel-header-title">{t({ "zh-CN": "数据管理", "en-US": "Data Management" })}</div>
+              <div className="settings-card-copy">
+                {t({
+                  "zh-CN": "导出诊断数据，或清理错误日志和离线队列。",
+                  "en-US": "Export diagnostics or clean up error logs and offline queue data."
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="settings-action-grid">
+            <button className="ghost-button" onClick={() => void exportDiagnostics()}>
+              {t({ "zh-CN": "导出诊断包", "en-US": "Export Diagnostics" })}
+            </button>
+            <button className="ghost-button" onClick={() => void clearErrorLogs()}>
+              {t({ "zh-CN": "清空错误日志", "en-US": "Clear Error Logs" })}
+            </button>
+            <button className="ghost-button" onClick={() => void clearOfflineQueue()}>
+              {t({ "zh-CN": "清空离线队列", "en-US": "Clear Offline Queue" })}
+            </button>
+            <button className="ghost-button danger" onClick={resetSettings}>
+              {t({ "zh-CN": "恢复默认设置", "en-US": "Reset Settings" })}
+            </button>
           </div>
         </section>
       </div>

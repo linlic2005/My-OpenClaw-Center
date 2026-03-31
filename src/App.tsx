@@ -17,8 +17,7 @@ export default function App() {
   const { language, theme, compactMode, gatewayUrl } = settings;
 
   useEffect(() => {
-    hydrate();
-    void connect(gatewayUrl).catch(() => undefined);
+    void hydrate().then(() => connect(gatewayUrl)).catch(() => undefined);
   }, [connect, gatewayUrl, hydrate]);
 
   useEffect(() => {
@@ -57,8 +56,8 @@ export default function App() {
             </div>
             <div className="sidebar-copy">
               {pickText(language, {
-                "zh-CN": "会话、草稿、@Agent 和消息状态都在这里统一处理。",
-                "en-US": "Sessions, drafts, @Agent mentions, and message states are managed here."
+                "zh-CN": "会话、草稿、引用回复和 Agent 提及都集中在这里管理。",
+                "en-US": "Sessions, drafts, quoted replies, and Agent mentions are managed here."
               })}
             </div>
           </div>
@@ -74,8 +73,8 @@ export default function App() {
             </div>
             <div className="sidebar-copy">
               {pickText(language, {
-                "zh-CN": "跨列移动、冲突反馈和实时同步都由 Gateway 驱动。",
-                "en-US": "Cross-column moves, conflict feedback, and live sync all come from the Gateway."
+                "zh-CN": "跨列流转、冲突修复和卡片编辑全部走真实 Gateway 协议。",
+                "en-US": "Cross-column moves, conflict recovery, and card editing all use the live Gateway protocol."
               })}
             </div>
           </div>
@@ -91,8 +90,8 @@ export default function App() {
             </div>
             <div className="sidebar-copy">
               {pickText(language, {
-                "zh-CN": "真实目录读取与分片上传都从这里发起。",
-                "en-US": "Live directory reads and chunked uploads start here."
+                "zh-CN": "目录浏览、分片上传和真实下载链路都从这里发起。",
+                "en-US": "Directory browsing, chunked uploads, and real downloads all start here."
               })}
             </div>
           </div>
@@ -103,13 +102,13 @@ export default function App() {
             <div className="sidebar-title">
               {pickText(language, {
                 "zh-CN": "工作室模式",
-                "en-US": "Studio Mode"
+                "en-US": "Workspace Mode"
               })}
             </div>
             <div className="sidebar-copy">
               {pickText(language, {
-                "zh-CN": "优先嵌入 Flask 子服务，可用时直接显示像素工作室，不可用时回退本地视图。",
-                "en-US": "The Flask subservice is embedded when available, with a local pixel fallback when it is not."
+                "zh-CN": "优先接入 Flask 子服务；不可用时回退到本地像素工作室视图。",
+                "en-US": "The Flask subservice is preferred, with a local pixel workspace fallback when unavailable."
               })}
             </div>
           </div>
@@ -125,8 +124,8 @@ export default function App() {
             </div>
             <div className="sidebar-copy">
               {pickText(language, {
-                "zh-CN": "Gateway、主题、通知和工作室配置都集中在这里。",
-                "en-US": "Gateway, theme, notifications, and Studio configuration live here."
+                "zh-CN": "Gateway、主题、渠道、技能和数据管理统一在这里配置。",
+                "en-US": "Gateway, theme, channels, skills, and data management live here."
               })}
             </div>
           </div>
@@ -137,7 +136,7 @@ export default function App() {
   const renderConnectionScreen = (title: string, meta: string, loading = false) => (
     <div className="connection-screen">
       <div className="connection-card">
-        <div className="connection-icon">{loading ? "⏳" : "📡"}</div>
+        <div className="connection-icon">{loading ? "..." : "WS"}</div>
         <div className="section-title">{title}</div>
         <div className="section-meta">{meta}</div>
         {loading ? (

@@ -31,9 +31,9 @@ function WorkspaceFallback() {
     () => ({
       idle: pickText(language, { "zh-CN": "休息区", "en-US": "Lounge" }),
       writing: pickText(language, { "zh-CN": "写作位", "en-US": "Writing Desk" }),
-      researching: pickText(language, { "zh-CN": "检索位", "en-US": "Research Desk" }),
+      researching: pickText(language, { "zh-CN": "研究位", "en-US": "Research Desk" }),
       executing: pickText(language, { "zh-CN": "执行位", "en-US": "Execution Desk" }),
-      syncing: pickText(language, { "zh-CN": "同步站", "en-US": "Sync Desk" }),
+      syncing: pickText(language, { "zh-CN": "同步位", "en-US": "Sync Desk" }),
       error: pickText(language, { "zh-CN": "异常区", "en-US": "Bug Zone" })
     }),
     [language]
@@ -43,10 +43,10 @@ function WorkspaceFallback() {
     () =>
       ({
         lounge: pickText(language, { "zh-CN": "休息区", "en-US": "Lounge" }),
-        writing: pickText(language, { "zh-CN": "写作位", "en-US": "Writing" }),
-        research: pickText(language, { "zh-CN": "检索位", "en-US": "Research" }),
-        execute: pickText(language, { "zh-CN": "执行位", "en-US": "Execute" }),
-        sync: pickText(language, { "zh-CN": "同步站", "en-US": "Sync" }),
+        writing: pickText(language, { "zh-CN": "写作区", "en-US": "Writing" }),
+        research: pickText(language, { "zh-CN": "研究区", "en-US": "Research" }),
+        execute: pickText(language, { "zh-CN": "执行区", "en-US": "Execute" }),
+        sync: pickText(language, { "zh-CN": "同步区", "en-US": "Sync" }),
         bug: pickText(language, { "zh-CN": "异常区", "en-US": "Bug Zone" })
       }) satisfies Record<ZoneKey, string>,
     [language]
@@ -56,27 +56,27 @@ function WorkspaceFallback() {
     () =>
       ({
         lounge: pickText(language, {
-          "zh-CN": "空闲或已完成的 Agent 会回到休息区待命。",
+          "zh-CN": "空闲或已完成的 Agent 会回到这里等待下一项任务。",
           "en-US": "Idle or completed agents return here to wait for the next task."
         }),
         writing: pickText(language, {
-          "zh-CN": "文案整理、方案撰写和结构输出集中在这里。",
+          "zh-CN": "文案整理、方案输出和结构化撰写主要发生在这里。",
           "en-US": "Writing-heavy tasks settle into this desk."
         }),
         research: pickText(language, {
-          "zh-CN": "检索、比对和资料梳理会停留在检索位。",
+          "zh-CN": "搜索、比对和资料分析会停留在研究位。",
           "en-US": "Search and analysis work stays on the research station."
         }),
         execute: pickText(language, {
-          "zh-CN": "命令执行、调试和构建会占用主操作位。",
+          "zh-CN": "命令执行、调试和构建任务使用主操作区。",
           "en-US": "Command execution and build work use the main rig."
         }),
         sync: pickText(language, {
-          "zh-CN": "同步、推送和状态汇总会汇入同步站。",
+          "zh-CN": "同步、推送和汇总处理通过这里流转。",
           "en-US": "Sync, push, and aggregation work flows through the dock."
         }),
         bug: pickText(language, {
-          "zh-CN": "遇到冲突或错误时会切换到异常区高亮展示。",
+          "zh-CN": "冲突或错误会在这里高亮展示。",
           "en-US": "Errors and conflicts light up the bug zone."
         })
       }) satisfies Record<ZoneKey, string>,
@@ -94,7 +94,7 @@ function WorkspaceFallback() {
     () =>
       agents.map((agent) =>
         pickText(language, {
-          "zh-CN": `${agent.name}：${agent.taskDescription}`,
+          "zh-CN": `${agent.name}: ${agent.taskDescription}`,
           "en-US": `${agent.name}: ${agent.taskDescription}`
         })
       ),
@@ -118,7 +118,7 @@ function WorkspaceFallback() {
         <div className="studio-hero-actions">
           <div className="badge badge-success">
             {pickText(language, {
-              "zh-CN": "像素办公室 fallback",
+              "zh-CN": "本地像素 fallback",
               "en-US": "Pixel fallback"
             })}
           </div>
@@ -308,8 +308,8 @@ export function StudioModule() {
               <div className="section-title">{pickText(language, { "zh-CN": "工作室", "en-US": "Workspace" })}</div>
               <div className="section-meta">
                 {pickText(language, {
-                  "zh-CN": "已接入 Flask 子服务，下面展示实时像素工作室视图。",
-                  "en-US": "The Flask subservice is active. The live pixel workspace is embedded below."
+                  "zh-CN": "已接入 Flask 子服务，下面展示实时工作室视图。",
+                  "en-US": "The Flask subservice is active. The live workspace is embedded below."
                 })}
               </div>
             </div>

@@ -312,5 +312,6 @@ export const defaultSettings: SettingsState = {
   channels: [
     { id: "channel_main", name: "Main Channel", tokenPreview: "tok_****f92d" },
     { id: "channel_test", name: "Test Channel", tokenPreview: "tok_****a18c" }
-  ]
+  ],
+  skillPreferences: []
 };

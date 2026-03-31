@@ -12,7 +12,17 @@ function getParentPath(path: string): string | null {
 }
 
 export function FileModule() {
-  const { path, items, selectedFileId, uploadTask, load, selectFile, uploadFile } = useFileStore();
+  const {
+    path,
+    items,
+    selectedFileId,
+    uploadTask,
+    downloadTask,
+    load,
+    selectFile,
+    uploadFile,
+    downloadFile
+  } = useFileStore();
   const language = useSettingsStore((state) => state.settings.language);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -32,13 +42,16 @@ export function FileModule() {
           </div>
           <div className="section-meta">
             {pickText(language, {
-              "zh-CN": "基于 Gateway 目录接口的真实浏览与分片上传。",
-              "en-US": "Live directory browsing and chunked uploads powered by the Gateway API."
+              "zh-CN": "基于 Gateway 目录接口的真实浏览、分片上传与下载校验。",
+              "en-US": "Live directory browsing, chunked uploads, and verified downloads powered by the Gateway API."
             })}
           </div>
         </div>
         <div className="file-toolbar">
           <div className="badge file-path-pill">{path}</div>
+          <button className="ghost-button" onClick={() => void load(language, path)}>
+            {pickText(language, { "zh-CN": "刷新", "en-US": "Refresh" })}
+          </button>
           <button className="primary-button" onClick={() => inputRef.current?.click()}>
             {pickText(language, {
               "zh-CN": "上传文件",
@@ -69,7 +82,7 @@ export function FileModule() {
                   {pickText(language, { "zh-CN": "返回上级目录", "en-US": "Go to parent folder" })}
                 </div>
               </div>
-              <div className="list-tail">↑</div>
+              <div className="list-tail">UP</div>
             </button>
           )}
 
@@ -86,9 +99,7 @@ export function FileModule() {
               }}
             >
               <div>
-                <div className="list-title">
-                  {item.type === "directory" ? "📁" : "📄"} {item.name}
-                </div>
+                <div className="list-title">{item.type === "directory" ? "[DIR]" : "[FILE]"} {item.name}</div>
                 <div className="list-meta">{item.path}</div>
               </div>
               <div className="list-tail">{item.type === "directory" ? "--" : formatFileSize(item.size)}</div>
@@ -101,10 +112,15 @@ export function FileModule() {
             <>
               <div className="panel-header">
                 <span>{selectedFile.name}</span>
-                <span className="muted">
-                  {selectedFile.language ?? pickText(language, { "zh-CN": "文件", "en-US": "file" })} ·{" "}
-                  {formatTime(selectedFile.modifiedAt, language)}
-                </span>
+                <div className="file-preview-actions">
+                  <span className="muted">
+                    {selectedFile.language ?? pickText(language, { "zh-CN": "文件", "en-US": "file" })} ·{" "}
+                    {formatTime(selectedFile.modifiedAt, language)}
+                  </span>
+                  <button className="ghost-button" onClick={() => void downloadFile(selectedFile.id)}>
+                    {pickText(language, { "zh-CN": "下载", "en-US": "Download" })}
+                  </button>
+                </div>
               </div>
               <pre className="code-preview">
                 {selectedFile.content ??
@@ -128,7 +144,7 @@ export function FileModule() {
       {uploadTask && (
         <div className={`upload-card ${uploadTask.status === "failed" ? "upload-failed" : ""}`}>
           <div className="panel-header">
-            <span>📤 {uploadTask.fileName}</span>
+            <span>UPLOAD {uploadTask.fileName}</span>
             <span>
               {uploadTask.status === "done"
                 ? pickText(language, { "zh-CN": "上传完成", "en-US": "Upload Complete" })
@@ -144,6 +160,27 @@ export function FileModule() {
             <span>{uploadTask.progress}%</span>
             <span>{uploadTask.speed}</span>
             <span>{uploadTask.remaining}</span>
+          </div>
+        </div>
+      )}
+
+      {downloadTask && (
+        <div className={`upload-card ${downloadTask.status === "failed" ? "upload-failed" : ""}`}>
+          <div className="panel-header">
+            <span>DOWNLOAD {downloadTask.fileName}</span>
+            <span>
+              {downloadTask.status === "done"
+                ? pickText(language, { "zh-CN": "下载完成", "en-US": "Download Complete" })
+                : downloadTask.status === "failed"
+                  ? pickText(language, { "zh-CN": "下载失败", "en-US": "Download Failed" })
+                  : pickText(language, { "zh-CN": "下载中", "en-US": "Downloading" })}
+            </span>
+          </div>
+          <div className="progress-track">
+            <div className="progress-bar" style={{ width: `${downloadTask.progress}%` }} />
+          </div>
+          <div className="upload-meta">
+            <span>{downloadTask.progress}%</span>
           </div>
         </div>
       )}
