@@ -14,6 +14,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ModuleTab>("chat");
   const { status, connect, reconnect, hydrate } = useGatewayStore();
   const language = useSettingsStore((state) => state.settings.language);
+  const theme = useSettingsStore((state) => state.settings.theme);
+  const compactMode = useSettingsStore((state) => state.settings.compactMode);
 
   useEffect(() => {
     hydrate();
@@ -23,6 +25,25 @@ export default function App() {
   useEffect(() => {
     document.documentElement.lang = language;
   }, [language]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const applyTheme = () => {
+      const resolvedTheme = theme === "system" ? (mediaQuery.matches ? "dark" : "light") : theme;
+      root.dataset.theme = resolvedTheme;
+      root.style.colorScheme = resolvedTheme;
+    };
+
+    applyTheme();
+    mediaQuery.addEventListener("change", applyTheme);
+    return () => mediaQuery.removeEventListener("change", applyTheme);
+  }, [theme]);
+
+  useEffect(() => {
+    document.body.classList.toggle("compact-mode", compactMode);
+  }, [compactMode]);
 
   const sidebar = useMemo(() => {
     switch (activeTab) {
