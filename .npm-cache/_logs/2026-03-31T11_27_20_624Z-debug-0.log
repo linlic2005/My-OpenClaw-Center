@@ -1,0 +1,36 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_global\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.12.0
+2 info using node@v24.12.0
+3 silly config load:file:C:\Program Files\nodejs\node_global\node_modules\npm\npmrc
+4 silly config load:file:C:\Users\linlic\Desktop\Openclaw Center\.npmrc
+5 silly config load:file:C:\Users\linlic\.npmrc
+6 silly config load:file:C:\Program Files\nodejs\node_global\etc\npmrc
+7 verbose title npm install
+8 verbose argv "install"
+9 verbose logfile logs-max:10 dir:c:\Users\linlic\Desktop\Openclaw Center\.npm-cache\_logs\2026-03-31T11_27_20_624Z-
+10 verbose logfile c:\Users\linlic\Desktop\Openclaw Center\.npm-cache\_logs\2026-03-31T11_27_20_624Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+13 http fetch GET https://registry.npmmirror.com/npm attempt 1 failed with EACCES
+14 silly idealTree buildDeps
+15 silly fetch manifest @tauri-apps/api@^2.0.0
+16 silly packumentCache full:https://registry.npmmirror.com/@tauri-apps%2fapi cache-miss
+17 http fetch GET https://registry.npmmirror.com/@tauri-apps%2fapi attempt 1 failed with EACCES
+18 http fetch GET https://registry.npmmirror.com/npm attempt 2 failed with EACCES
+19 http fetch GET https://registry.npmmirror.com/@tauri-apps%2fapi attempt 2 failed with EACCES
+20 http fetch GET https://registry.npmmirror.com/npm attempt 3 failed with EACCES
+21 http fetch GET https://registry.npmmirror.com/@tauri-apps%2fapi attempt 3 failed with EACCES
+22 silly fetch manifest @tauri-apps/plugin-fs@^2.0.0
+23 silly packumentCache full:https://registry.npmmirror.com/@tauri-apps%2fplugin-fs cache-miss
+24 http fetch GET https://registry.npmmirror.com/@tauri-apps%2fplugin-fs attempt 1 failed with EACCES
+25 http fetch GET https://registry.npmmirror.com/@tauri-apps%2fplugin-fs attempt 2 failed with EACCES
+26 http fetch GET https://registry.npmmirror.com/@tauri-apps%2fplugin-fs attempt 3 failed with EACCES
+27 silly fetch manifest @tauri-apps/plugin-sql@^2.0.0
+28 silly packumentCache full:https://registry.npmmirror.com/@tauri-apps%2fplugin-sql cache-miss
+29 http fetch GET https://registry.npmmirror.com/@tauri-apps%2fplugin-sql attempt 1 failed with EACCES
+30 http fetch GET https://registry.npmmirror.com/@tauri-apps%2fplugin-sql attempt 2 failed with EACCES
+31 http fetch GET https://registry.npmmirror.com/@tauri-apps%2fplugin-sql attempt 3 failed with EACCES
+32 silly fetch manifest react@^18.3.1
+33 silly packumentCache full:https://registry.npmmirror.com/react cache-miss
+34 http fetch GET https://registry.npmmirror.com/react attempt 1 failed with EACCES
+35 http fetch GET https://registry.npmmirror.com/react attempt 2 failed with EACCES
