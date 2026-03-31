@@ -13,15 +13,15 @@ type StatusHandler = (status: ConnectionStatus) => void;
 type StateHandler = (state: GatewayStateSnapshot) => void;
 type PushHandler<TPayload = unknown> = (event: GatewayPushEvent<TPayload>) => void;
 
-interface PendingRequest<TPayload = unknown> {
-  resolve: (value: TPayload) => void;
+interface PendingRequest {
+  resolve: (value: any) => void;
   reject: (reason?: unknown) => void;
   timeout: number;
 }
 
-interface QueueEntry<TPayload = unknown> extends QueuedRequest {
+interface QueueEntry extends QueuedRequest {
   timeoutMs: number;
-  resolve: (value: TPayload) => void;
+  resolve: (value: any) => void;
   reject: (reason?: unknown) => void;
 }
 

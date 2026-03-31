@@ -17,14 +17,14 @@ const tabLabels: Record<
   { icon: string; label: Record<"zh-CN" | "en-US", string> }
 > = {
   chat: { icon: "💬", label: { "zh-CN": "聊天", "en-US": "Chat" } },
-  kanban: { icon: "📋", label: { "zh-CN": "看板", "en-US": "Kanban" } },
+  kanban: { icon: "🗂️", label: { "zh-CN": "看板", "en-US": "Kanban" } },
   files: { icon: "📁", label: { "zh-CN": "文件", "en-US": "Files" } },
-  studio: { icon: "🪄", label: { "zh-CN": "工作室", "en-US": "Studio" } },
+  studio: { icon: "🧪", label: { "zh-CN": "工作室", "en-US": "Studio" } },
   settings: { icon: "⚙️", label: { "zh-CN": "设置", "en-US": "Settings" } }
 };
 
 export function Shell({ activeTab, onTabChange, sidebar, children }: ShellProps) {
-  const { status, reconnectAttempt, offlineQueue } = useGatewayStore();
+  const { status, reconnectAttempt, offlineQueue, url } = useGatewayStore();
   const language = useSettingsStore((state) => state.settings.language);
 
   const statusLabel = useMemo(() => {
@@ -67,6 +67,7 @@ export function Shell({ activeTab, onTabChange, sidebar, children }: ShellProps)
             </div>
           </div>
         </div>
+
         <nav className="tabs">
           {(Object.keys(tabLabels) as ModuleTab[]).map((tab) => (
             <button
@@ -79,6 +80,7 @@ export function Shell({ activeTab, onTabChange, sidebar, children }: ShellProps)
             </button>
           ))}
         </nav>
+
         <div className="topbar-user">👤</div>
       </header>
 
@@ -91,7 +93,7 @@ export function Shell({ activeTab, onTabChange, sidebar, children }: ShellProps)
         <div className={cn("status-dot", `status-${status}`)} />
         <span>{statusLabel}</span>
         <span className="status-divider" />
-        <span>Gateway: 192.168.123.115:18789</span>
+        <span>{url.replace(/^wss?:\/\//, "")}</span>
         <span className="status-divider" />
         <span>
           {pickText(language, {

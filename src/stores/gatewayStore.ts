@@ -1,52 +1,59 @@
 import { create } from "zustand";
 import { gatewayService } from "../services/GatewayService";
-import type { ConnectionStatus, QueuedRequest } from "../types";
+import type { AgentProfile, ConnectionStatus, QueuedRequest } from "../types";
 
 interface GatewayStore {
   status: ConnectionStatus;
   reconnectAttempt: number;
   offlineQueue: QueuedRequest[];
+  url: string;
+  agents: AgentProfile[];
+  agentsLoading: boolean;
   initialized: boolean;
-  connect: () => Promise<void>;
+  connect: (url?: string) => Promise<void>;
   disconnect: () => void;
   reconnect: () => Promise<void>;
   hydrate: () => void;
+  refreshAgents: () => Promise<void>;
 }
 
 export const useGatewayStore = create<GatewayStore>((set, get) => ({
-  status: "disconnected",
-  reconnectAttempt: 0,
-  offlineQueue: [],
+  status: gatewayService.getStatus(),
+  reconnectAttempt: gatewayService.getReconnectAttempt(),
+  offlineQueue: gatewayService.getOfflineQueue(),
+  url: gatewayService.getUrl(),
+  agents: [],
+  agentsLoading: false,
   initialized: false,
-  async connect() {
-    await gatewayService.connect();
-    set({
-      status: gatewayService.getStatus(),
-      reconnectAttempt: gatewayService.getReconnectAttempt(),
-      offlineQueue: gatewayService.getOfflineQueue()
-    });
+  async connect(url) {
+    await gatewayService.connect(url);
+    set(gatewayService.getStateSnapshot());
+    void get().refreshAgents();
   },
   disconnect() {
     gatewayService.disconnect();
-    set({ status: "disconnected" });
+    set({ ...gatewayService.getStateSnapshot(), agentsLoading: false });
   },
   async reconnect() {
     await gatewayService.reconnect();
-    set({
-      status: gatewayService.getStatus(),
-      reconnectAttempt: gatewayService.getReconnectAttempt(),
-      offlineQueue: gatewayService.getOfflineQueue()
-    });
+    set(gatewayService.getStateSnapshot());
+    void get().refreshAgents();
   },
   hydrate() {
     if (get().initialized) return;
-    gatewayService.onStatusChange((status) => {
-      set({
-        status,
-        reconnectAttempt: gatewayService.getReconnectAttempt(),
-        offlineQueue: gatewayService.getOfflineQueue()
-      });
+    gatewayService.onStateChange((snapshot) => {
+      set(snapshot);
     });
     set({ initialized: true });
+  },
+  async refreshAgents() {
+    if (get().status !== "connected") return;
+    set({ agentsLoading: true });
+    try {
+      const agents = await gatewayService.getAgents();
+      set({ agents, agentsLoading: false });
+    } catch {
+      set({ agentsLoading: false });
+    }
   }
 }));

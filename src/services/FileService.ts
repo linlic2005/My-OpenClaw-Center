@@ -1,59 +1,199 @@
-import { getMockFiles } from "../data/mock";
 import type { AppLanguage } from "../lib/i18n";
-import { createId, sleep } from "../lib/utils";
+import { createId } from "../lib/utils";
 import { gatewayService } from "./GatewayService";
-import type { FileItem, UploadTask } from "../types";
+import type { FileItem, UploadSession, UploadTask } from "../types";
+
+interface FileSnapshot {
+  path: string;
+  items: FileItem[];
+  uploadTask: UploadTask | null;
+}
+
+type FileListener = (snapshot: FileSnapshot) => void;
+
+function normalizePath(basePath: string, name: string): string {
+  return `${basePath.replace(/\/$/, "")}/${name}`.replace(/\/{2,}/g, "/");
+}
+
+function normalizeFileItem(raw: unknown, currentPath: string): FileItem {
+  const record = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+  const name = String(record.name ?? "unknown");
+  const explicitPath = typeof record.path === "string" ? record.path : normalizePath(currentPath, name);
+
+  return {
+    id: String(record.id ?? createId("file")),
+    name,
+    path: explicitPath,
+    type: record.type === "directory" ? "directory" : "file",
+    size: Number(record.size ?? 0),
+    modifiedAt: Number(record.modifiedAt ?? Date.now()),
+    language: typeof record.language === "string" ? record.language : undefined,
+    content: typeof record.content === "string" ? record.content : undefined,
+    previewAvailable: Boolean(record.content)
+  };
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      resolve(result.includes(",") ? result.split(",")[1] : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Unable to read file chunk"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function sha256Hex(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer();
+  const hashBuffer = await window.crypto.subtle.digest("SHA-256", buffer);
+  return [...new Uint8Array(hashBuffer)].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+function formatSpeed(bytesPerSecond: number): string {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return "--";
+  if (bytesPerSecond < 1024 * 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+  return `${(bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s`;
+}
+
+function formatRemaining(seconds: number, language: AppLanguage): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return language === "zh-CN" ? "即将完成" : "Almost done";
+  const rounded = Math.ceil(seconds);
+  return language === "zh-CN" ? `剩余 ${rounded}s` : `${rounded}s left`;
+}
 
 class FileService {
   private language: AppLanguage = "zh-CN";
-  private files: FileItem[] = [];
+  private path = "/project";
+  private items: FileItem[] = [];
+  private uploadTask: UploadTask | null = null;
+  private listeners = new Set<FileListener>();
 
-  constructor() {
-    this.reset();
+  subscribe(listener: FileListener): () => void {
+    this.listeners.add(listener);
+    listener(this.getSnapshot());
+    return () => this.listeners.delete(listener);
   }
 
   setLanguage(language: AppLanguage): void {
-    if (this.language === language) return;
     this.language = language;
-    this.reset();
   }
 
-  private reset(): void {
-    this.files = getMockFiles(this.language);
+  getSnapshot(): FileSnapshot {
+    return {
+      path: this.path,
+      items: [...this.items],
+      uploadTask: this.uploadTask ? { ...this.uploadTask } : null
+    };
   }
 
   async listDirectory(path = "/project"): Promise<FileItem[]> {
-    await sleep(220);
-    return this.files.filter((item) => item.path.startsWith(path) || item.path === path);
+    const payload = await gatewayService.send<{ path?: string; items?: unknown[] }>("file.list_directory", {
+      path,
+      page: 1,
+      pageSize: 200
+    });
+
+    this.path = String(payload.path ?? path);
+    this.items = Array.isArray(payload.items)
+      ? payload.items.map((item) => normalizeFileItem(item, this.path))
+      : [];
+    this.emit();
+    return [...this.items];
   }
 
-  async simulateUpload(fileName: string): Promise<UploadTask> {
-    const task: UploadTask = {
-      id: createId("upload"),
-      fileName,
+  async uploadFile(file: File, targetPath = this.path): Promise<void> {
+    const taskId = createId("upload");
+    this.uploadTask = {
+      id: taskId,
+      fileName: file.name,
       progress: 0,
-      speed: "2.5 MB/s",
-      remaining: "30s",
+      speed: "--",
+      remaining: this.language === "zh-CN" ? "准备中" : "Preparing",
       status: "running"
     };
-    await gatewayService.send("file.upload_init", { fileName, fileSize: 12_000_000 });
-    return task;
+    this.emit();
+
+    try {
+      const session = await this.initializeUpload(file, targetPath);
+      const startedAt = performance.now();
+
+      for (let chunkIndex = 0; chunkIndex < session.totalChunks; chunkIndex += 1) {
+        const chunkStart = chunkIndex * session.chunkSize;
+        const chunkEnd = Math.min(chunkStart + session.chunkSize, file.size);
+        const blob = file.slice(chunkStart, chunkEnd);
+
+        await gatewayService.send("file.upload_chunk", {
+          uploadId: session.uploadId,
+          chunkIndex,
+          data: await blobToBase64(blob),
+          hash: await sha256Hex(blob)
+        });
+
+        const uploadedBytes = chunkEnd;
+        const progress = Math.round((uploadedBytes / file.size) * 100);
+        const elapsedSeconds = Math.max((performance.now() - startedAt) / 1000, 0.001);
+        const speed = uploadedBytes / elapsedSeconds;
+        const remaining = (file.size - uploadedBytes) / Math.max(speed, 1);
+
+        this.uploadTask = {
+          id: taskId,
+          fileName: file.name,
+          progress,
+          speed: formatSpeed(speed),
+          remaining: formatRemaining(remaining, this.language),
+          status: "running"
+        };
+        this.emit();
+      }
+
+      await gatewayService.send("file.upload_complete", { uploadId: session.uploadId });
+
+      this.uploadTask = {
+        id: taskId,
+        fileName: file.name,
+        progress: 100,
+        speed: this.uploadTask?.speed ?? "--",
+        remaining: this.language === "zh-CN" ? "上传完成" : "Upload complete",
+        status: "done"
+      };
+      this.emit();
+
+      await this.listDirectory(targetPath);
+    } catch {
+      this.uploadTask = this.uploadTask
+        ? {
+            ...this.uploadTask,
+            status: "failed",
+            remaining: this.language === "zh-CN" ? "上传失败" : "Upload failed"
+          }
+        : null;
+      this.emit();
+    }
   }
 
-  async completeUpload(fileName: string): Promise<FileItem> {
-    await sleep(500);
-    const newFile: FileItem = {
-      id: createId("file"),
-      name: fileName,
-      path: `/project/${fileName}`,
-      type: "file",
-      size: 2_100_000,
-      modifiedAt: Date.now(),
-      language: "text",
-      content: this.language === "zh-CN" ? "新上传文件" : "New uploaded file"
+  private async initializeUpload(file: File, targetPath: string): Promise<UploadSession> {
+    const payload = await gatewayService.send<Record<string, unknown>>("file.upload_init", {
+      fileName: file.name,
+      fileSize: file.size,
+      directoryId: targetPath,
+      path: targetPath
+    });
+
+    const chunkSize = Number(payload.chunkSize ?? 1024 * 1024);
+    const totalChunks = Number(payload.totalChunks ?? Math.max(Math.ceil(file.size / chunkSize), 1));
+
+    return {
+      uploadId: String(payload.uploadId ?? createId("upload")),
+      chunkSize,
+      totalChunks
     };
-    this.files = [newFile, ...this.files];
-    return newFile;
+  }
+
+  private emit(): void {
+    const snapshot = this.getSnapshot();
+    this.listeners.forEach((listener) => listener(snapshot));
   }
 }
 

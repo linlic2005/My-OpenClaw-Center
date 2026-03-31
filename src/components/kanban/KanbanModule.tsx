@@ -22,12 +22,13 @@ export function KanbanModule() {
           </div>
           <div className="section-meta">
             {pickText(language, {
-              "zh-CN": "支持跨列同步、冲突提示和离线补发",
-              "en-US": "Supports cross-column sync, conflict feedback, and offline replay"
+              "zh-CN": "实时展示 Gateway 返回的列与卡片，并支持跨列同步。",
+              "en-US": "Shows live board data from the Gateway and supports cross-column sync."
             })}
           </div>
         </div>
       </div>
+
       <div className="kanban-board">
         {columns.map((column) => (
           <div key={column.id} className="kanban-column">
@@ -35,6 +36,7 @@ export function KanbanModule() {
               <span>{column.title}</span>
               <span>{cards.filter((card) => card.columnId === column.id).length}</span>
             </div>
+
             <div className="kanban-cards">
               {cards
                 .filter((card) => card.columnId === column.id)
@@ -46,12 +48,16 @@ export function KanbanModule() {
                   >
                     <div className="kanban-card-top">
                       <span className="badge" style={{ backgroundColor: card.labels[0]?.color }}>
-                        {card.labels[0]?.name}
+                        {card.labels[0]?.name ?? pickText(language, { "zh-CN": "未分类", "en-US": "General" })}
                       </span>
-                      <span>{card.syncStatus === "syncing" ? "🔄" : "✓"}</span>
+                      <span>
+                        {card.syncStatus === "syncing" ? "🔄" : card.syncStatus === "error" ? "⚠️" : "✓"}
+                      </span>
                     </div>
+
                     <div className="kanban-card-title">{card.title}</div>
                     <div className="kanban-card-desc">{card.description}</div>
+
                     <div className="kanban-card-actions">
                       {columns
                         .filter((item) => item.id !== column.id)
@@ -65,7 +71,7 @@ export function KanbanModule() {
                             }}
                           >
                             {pickText(language, {
-                              "zh-CN": `移到${target.title}`,
+                              "zh-CN": `移动到 ${target.title}`,
                               "en-US": `Move to ${target.title}`
                             })}
                           </span>
@@ -104,8 +110,8 @@ export function KanbanModule() {
         ) : (
           <div className="empty-state small">
             {pickText(language, {
-              "zh-CN": "选择一张卡片查看详情",
-              "en-US": "Select a card to view details"
+              "zh-CN": "选择一张卡片查看详情。",
+              "en-US": "Select a card to view details."
             })}
           </div>
         )}

@@ -9,6 +9,7 @@ interface ChatStore {
   messages: Record<string, ChatMessage[]>;
   drafts: Record<string, string>;
   loading: boolean;
+  initialized: boolean;
   load: (language?: AppLanguage) => Promise<void>;
   selectSession: (sessionId: string) => Promise<void>;
   createSession: () => Promise<void>;
@@ -18,70 +19,78 @@ interface ChatStore {
   retryMessage: (sessionId: string, messageId: string) => Promise<void>;
 }
 
-export const useChatStore = create<ChatStore>((set) => ({
+let chatUnsubscribe: (() => void) | null = null;
+
+export const useChatStore = create<ChatStore>((set, get) => ({
   sessions: [],
   currentSessionId: null,
   messages: {},
   drafts: {},
   loading: false,
+  initialized: false,
   async load(language) {
     if (language) chatService.setLanguage(language);
+
+    if (!get().initialized) {
+      chatUnsubscribe?.();
+      chatUnsubscribe = chatService.subscribe((snapshot) => {
+        set((state) => {
+          const currentSessionId =
+            state.currentSessionId && snapshot.sessions.some((session) => session.id === state.currentSessionId)
+              ? state.currentSessionId
+              : snapshot.sessions[0]?.id ?? null;
+
+          return {
+            sessions: snapshot.sessions,
+            messages: snapshot.messages,
+            currentSessionId
+          };
+        });
+      });
+      set({ initialized: true });
+    }
+
     set({ loading: true });
-    const sessions = await chatService.listSessions();
-    const currentSessionId = sessions[0]?.id ?? null;
-    const messages = currentSessionId
-      ? { [currentSessionId]: await chatService.loadHistory(currentSessionId) }
-      : {};
-    set({ sessions, currentSessionId, messages, loading: false });
+    await chatService.bootstrap();
+
+    const currentSessionId = get().currentSessionId ?? get().sessions[0]?.id ?? null;
+    if (currentSessionId) {
+      await chatService.ensureHistoryLoaded(currentSessionId);
+      set({ currentSessionId });
+    }
+
+    set({ loading: false });
   },
   async selectSession(sessionId) {
-    const history = await chatService.loadHistory(sessionId);
-    set((state) => ({
-      currentSessionId: sessionId,
-      messages: { ...state.messages, [sessionId]: history }
-    }));
+    set({ currentSessionId: sessionId, loading: true });
+    await chatService.ensureHistoryLoaded(sessionId);
+    set({ loading: false });
   },
   async createSession() {
     const session = await chatService.createSession();
     set((state) => ({
-      sessions: [session, ...state.sessions],
       currentSessionId: session.id,
-      messages: { ...state.messages, [session.id]: [] }
+      drafts: { ...state.drafts, [session.id]: "" }
     }));
   },
   async deleteSession(sessionId) {
     await chatService.deleteSession(sessionId);
     set((state) => {
-      const sessions = state.sessions.filter((session) => session.id !== sessionId);
-      const nextSessionId =
-        state.currentSessionId === sessionId ? (sessions[0]?.id ?? null) : state.currentSessionId;
-      const messages = { ...state.messages };
-      delete messages[sessionId];
-      return { sessions, currentSessionId: nextSessionId, messages };
+      const drafts = { ...state.drafts };
+      delete drafts[sessionId];
+      return { drafts };
     });
   },
   setDraft(sessionId, draft) {
     set((state) => ({ drafts: { ...state.drafts, [sessionId]: draft } }));
   },
   async sendMessage(sessionId, content, mentions = []) {
-    const message = await chatService.sendMessage(sessionId, content, mentions);
+    await chatService.sendMessage(sessionId, content, mentions);
     set((state) => ({
-      messages: {
-        ...state.messages,
-        [sessionId]: [...(state.messages[sessionId] ?? []), message]
-      },
       drafts: { ...state.drafts, [sessionId]: "" }
-    }));
-    const history = await chatService.loadHistory(sessionId);
-    const sessions = await chatService.listSessions();
-    set((state) => ({
-      messages: { ...state.messages, [sessionId]: history },
-      sessions
     }));
   },
   async retryMessage(sessionId, messageId) {
     await chatService.retryMessage(sessionId, messageId);
-    const history = await chatService.loadHistory(sessionId);
-    set((state) => ({ messages: { ...state.messages, [sessionId]: history } }));
   }
 }));

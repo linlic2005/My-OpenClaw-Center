@@ -13,14 +13,13 @@ import type { ModuleTab } from "./types";
 export default function App() {
   const [activeTab, setActiveTab] = useState<ModuleTab>("chat");
   const { status, connect, reconnect, hydrate } = useGatewayStore();
-  const language = useSettingsStore((state) => state.settings.language);
-  const theme = useSettingsStore((state) => state.settings.theme);
-  const compactMode = useSettingsStore((state) => state.settings.compactMode);
+  const settings = useSettingsStore((state) => state.settings);
+  const { language, theme, compactMode, gatewayUrl } = settings;
 
   useEffect(() => {
     hydrate();
-    void connect();
-  }, [connect, hydrate]);
+    void connect(gatewayUrl).catch(() => undefined);
+  }, [connect, gatewayUrl, hydrate]);
 
   useEffect(() => {
     document.documentElement.lang = language;
@@ -58,8 +57,8 @@ export default function App() {
             </div>
             <div className="sidebar-copy">
               {pickText(language, {
-                "zh-CN": "会话、草稿、@Agent 和消息状态在这里统一管理。",
-                "en-US": "Sessions, drafts, @Agent mentions, and message states live here."
+                "zh-CN": "会话、草稿、@Agent 和消息状态都在这里统一处理。",
+                "en-US": "Sessions, drafts, @Agent mentions, and message states are managed here."
               })}
             </div>
           </div>
@@ -75,8 +74,8 @@ export default function App() {
             </div>
             <div className="sidebar-copy">
               {pickText(language, {
-                "zh-CN": "支持列内排序、跨列移动与实时同步提示。",
-                "en-US": "Includes card ordering, cross-column moves, and sync feedback."
+                "zh-CN": "跨列移动、冲突反馈和实时同步都由 Gateway 驱动。",
+                "en-US": "Cross-column moves, conflict feedback, and live sync all come from the Gateway."
               })}
             </div>
           </div>
@@ -86,14 +85,14 @@ export default function App() {
           <div className="sidebar-card">
             <div className="sidebar-title">
               {pickText(language, {
-                "zh-CN": "目录导航",
-                "en-US": "Directory Navigation"
+                "zh-CN": "文件导航",
+                "en-US": "File Navigation"
               })}
             </div>
             <div className="sidebar-copy">
               {pickText(language, {
-                "zh-CN": "文件预览、上传进度和远端目录联动都从这里开始。",
-                "en-US": "File preview, upload progress, and remote browsing start here."
+                "zh-CN": "真实目录读取与分片上传都从这里发起。",
+                "en-US": "Live directory reads and chunked uploads start here."
               })}
             </div>
           </div>
@@ -109,8 +108,8 @@ export default function App() {
             </div>
             <div className="sidebar-copy">
               {pickText(language, {
-                "zh-CN": "后续可嵌入 Flask 页面，接入 live_status.json 实时可视化。",
-                "en-US": "Ready for Flask iframe integration and live_status.json visualization."
+                "zh-CN": "优先嵌入 Flask 子服务，可用时直接显示像素工作室，不可用时回退本地视图。",
+                "en-US": "The Flask subservice is embedded when available, with a local pixel fallback when it is not."
               })}
             </div>
           </div>
@@ -126,8 +125,8 @@ export default function App() {
             </div>
             <div className="sidebar-copy">
               {pickText(language, {
-                "zh-CN": "Gateway、主题、通知、技能和 Studio 开关统一维护。",
-                "en-US": "Manage gateway, theme, notifications, skills, and Studio options."
+                "zh-CN": "Gateway、主题、通知和工作室配置都集中在这里。",
+                "en-US": "Gateway, theme, notifications, and Studio configuration live here."
               })}
             </div>
           </div>
@@ -135,51 +134,47 @@ export default function App() {
     }
   }, [activeTab, language]);
 
-  const content = useMemo(() => {
-    if (status === "disconnected") {
-      return (
-        <div className="connection-screen">
-          <div className="connection-card">
-            <div className="connection-icon">🖥️</div>
-            <div className="section-title">
-              {pickText(language, {
-                "zh-CN": "连接断开",
-                "en-US": "Connection Lost"
-              })}
-            </div>
-            <div className="section-meta">
-              {pickText(language, {
-                "zh-CN": "无法连接到 ws://192.168.123.115:18789",
-                "en-US": "Unable to reach ws://192.168.123.115:18789"
-              })}
-            </div>
-            <button className="primary-button" onClick={() => void reconnect()}>
-              {pickText(language, {
-                "zh-CN": "重新连接",
-                "en-US": "Reconnect"
-              })}
-            </button>
+  const renderConnectionScreen = (title: string, meta: string, loading = false) => (
+    <div className="connection-screen">
+      <div className="connection-card">
+        <div className="connection-icon">{loading ? "⏳" : "📡"}</div>
+        <div className="section-title">{title}</div>
+        <div className="section-meta">{meta}</div>
+        {loading ? (
+          <div className="progress-track large">
+            <div className="progress-bar" style={{ width: "60%" }} />
           </div>
-        </div>
+        ) : (
+          <button className="primary-button" onClick={() => void reconnect()}>
+            {pickText(language, {
+              "zh-CN": "重新连接",
+              "en-US": "Reconnect"
+            })}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  const content = useMemo(() => {
+    if (status === "connecting" && activeTab !== "settings") {
+      return renderConnectionScreen(
+        pickText(language, {
+          "zh-CN": "正在连接 Gateway",
+          "en-US": "Connecting to Gateway"
+        }),
+        gatewayUrl,
+        true
       );
     }
 
-    if (status === "connecting") {
-      return (
-        <div className="connection-screen">
-          <div className="connection-card">
-            <div className="connection-icon">⏳</div>
-            <div className="section-title">
-              {pickText(language, {
-                "zh-CN": "正在连接 Gateway",
-                "en-US": "Connecting to Gateway"
-              })}
-            </div>
-            <div className="progress-track large">
-              <div className="progress-bar" style={{ width: "60%" }} />
-            </div>
-          </div>
-        </div>
+    if (status === "disconnected" && activeTab !== "settings" && activeTab !== "studio") {
+      return renderConnectionScreen(
+        pickText(language, {
+          "zh-CN": "连接已断开",
+          "en-US": "Connection Lost"
+        }),
+        gatewayUrl
       );
     }
 
@@ -197,7 +192,7 @@ export default function App() {
       default:
         return null;
     }
-  }, [activeTab, language, reconnect, status]);
+  }, [activeTab, gatewayUrl, language, reconnect, status]);
 
   return (
     <Shell activeTab={activeTab} onTabChange={setActiveTab} sidebar={sidebar}>

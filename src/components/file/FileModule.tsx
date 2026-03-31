@@ -1,18 +1,27 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { pickText } from "../../lib/i18n";
 import { formatFileSize, formatTime } from "../../lib/utils";
 import { useFileStore } from "../../stores/fileStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 
+function getParentPath(path: string): string | null {
+  if (path === "/" || path === "/project") return null;
+  const segments = path.split("/").filter(Boolean);
+  if (segments.length <= 1) return "/project";
+  return `/${segments.slice(0, -1).join("/")}`;
+}
+
 export function FileModule() {
-  const { items, selectedFileId, uploadTask, load, selectFile, uploadSample } = useFileStore();
+  const { path, items, selectedFileId, uploadTask, load, selectFile, uploadFile } = useFileStore();
   const language = useSettingsStore((state) => state.settings.language);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     void load(language, "/project");
   }, [language, load]);
 
   const selectedFile = items.find((item) => item.id === selectedFileId) ?? null;
+  const parentPath = useMemo(() => getParentPath(path), [path]);
 
   return (
     <div className="file-shell">
@@ -23,26 +32,58 @@ export function FileModule() {
           </div>
           <div className="section-meta">
             {pickText(language, {
-              "zh-CN": "目录树、预览、上传进度和批量操作入口",
-              "en-US": "Directory tree, preview, upload progress, and batch actions"
+              "zh-CN": "基于 Gateway 目录接口的真实浏览与分片上传。",
+              "en-US": "Live directory browsing and chunked uploads powered by the Gateway API."
             })}
           </div>
         </div>
-        <button className="primary-button" onClick={() => void uploadSample(language)}>
-          {pickText(language, {
-            "zh-CN": "上传示例文件",
-            "en-US": "Upload Sample File"
-          })}
-        </button>
+        <div className="file-toolbar">
+          <div className="badge file-path-pill">{path}</div>
+          <button className="primary-button" onClick={() => inputRef.current?.click()}>
+            {pickText(language, {
+              "zh-CN": "上传文件",
+              "en-US": "Upload File"
+            })}
+          </button>
+          <input
+            ref={inputRef}
+            className="file-hidden-input"
+            type="file"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              void uploadFile(file, language);
+              event.target.value = "";
+            }}
+          />
+        </div>
       </div>
 
       <div className="file-grid">
         <div className="file-list">
+          {parentPath && (
+            <button className="file-item" onClick={() => void load(language, parentPath)}>
+              <div>
+                <div className="list-title">..</div>
+                <div className="list-meta">
+                  {pickText(language, { "zh-CN": "返回上级目录", "en-US": "Go to parent folder" })}
+                </div>
+              </div>
+              <div className="list-tail">↑</div>
+            </button>
+          )}
+
           {items.map((item) => (
             <button
               key={item.id}
               className={`file-item ${selectedFileId === item.id ? "file-item-active" : ""}`}
-              onClick={() => selectFile(item.id)}
+              onClick={() => {
+                if (item.type === "directory") {
+                  void load(language, item.path);
+                  return;
+                }
+                selectFile(item.id);
+              }}
             >
               <div>
                 <div className="list-title">
@@ -68,16 +109,16 @@ export function FileModule() {
               <pre className="code-preview">
                 {selectedFile.content ??
                   pickText(language, {
-                    "zh-CN": "该文件类型暂不支持预览",
-                    "en-US": "Preview is not available for this file type"
+                    "zh-CN": "当前 Gateway 协议未提供文件预览内容，这里展示基础元信息。",
+                    "en-US": "The current Gateway contract does not expose preview content, so this panel shows metadata only."
                   })}
               </pre>
             </>
           ) : (
             <div className="empty-state small">
               {pickText(language, {
-                "zh-CN": "选择文件后可在这里查看预览",
-                "en-US": "Select a file to preview it here"
+                "zh-CN": "选择一个文件后可在这里查看详情。",
+                "en-US": "Select a file to inspect its details here."
               })}
             </div>
           )}
@@ -91,7 +132,9 @@ export function FileModule() {
             <span>
               {uploadTask.status === "done"
                 ? pickText(language, { "zh-CN": "上传完成", "en-US": "Upload Complete" })
-                : pickText(language, { "zh-CN": "上传中", "en-US": "Uploading" })}
+                : uploadTask.status === "failed"
+                  ? pickText(language, { "zh-CN": "上传失败", "en-US": "Upload Failed" })
+                  : pickText(language, { "zh-CN": "上传中", "en-US": "Uploading" })}
             </span>
           </div>
           <div className="progress-track">

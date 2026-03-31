@@ -1,12 +1,18 @@
-import { useMemo } from "react";
-import { getMockAgents } from "../../data/mock";
+import { useEffect } from "react";
 import { pickText } from "../../lib/i18n";
+import { useGatewayStore } from "../../stores/gatewayStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 
 export function SettingsModule() {
   const { settings, connectionTest, update, testConnection } = useSettingsStore();
-  const agents = useMemo(() => getMockAgents(settings.language), [settings.language]);
+  const { agents, agentsLoading, refreshAgents, status } = useGatewayStore();
   const t = <T extends string>(copy: { "zh-CN": T; "en-US": T }) => pickText(settings.language, copy);
+
+  useEffect(() => {
+    if (status === "connected" && !agents.length) {
+      void refreshAgents();
+    }
+  }, [agents.length, refreshAgents, status]);
 
   return (
     <div className="settings-shell">
@@ -14,13 +20,11 @@ export function SettingsModule() {
         <section className="panel settings-panel">
           <div className="settings-card-head">
             <div>
-              <div className="panel-header-title">
-                {t({ "zh-CN": "🔌 Gateway 连接", "en-US": "🔌 Gateway Connection" })}
-              </div>
+              <div className="panel-header-title">{t({ "zh-CN": "Gateway 连接", "en-US": "Gateway Connection" })}</div>
               <div className="settings-card-copy">
                 {t({
-                  "zh-CN": "管理远程网关地址、代理方式和连接验证。",
-                  "en-US": "Manage the remote gateway URL, proxy mode, and connection checks."
+                  "zh-CN": "管理远程 Gateway 地址、代理模式和连接检查。",
+                  "en-US": "Manage the gateway endpoint, proxy mode, and connection checks."
                 })}
               </div>
             </div>
@@ -60,11 +64,11 @@ export function SettingsModule() {
           {connectionTest && (
             <div className="success-card settings-status-card">
               <div className="settings-status-title">
-                {t({ "zh-CN": "连接状态正常", "en-US": "Connection looks good" })}
+                {t({ "zh-CN": "连接测试成功", "en-US": "Connection looks good" })}
               </div>
               <div className="settings-status-meta">
                 Gateway {connectionTest.version} · {t({ "zh-CN": "延迟", "en-US": "Latency" })}{" "}
-                {connectionTest.latency}ms · {t({ "zh-CN": "在线客户端", "en-US": "Active Clients" })}{" "}
+                {connectionTest.latency}ms · {t({ "zh-CN": "在线连接", "en-US": "Active Clients" })}{" "}
                 {connectionTest.activeConnections}
               </div>
             </div>
@@ -74,13 +78,11 @@ export function SettingsModule() {
         <section className="panel settings-panel">
           <div className="settings-card-head">
             <div>
-              <div className="panel-header-title">
-                {t({ "zh-CN": "🎨 外观", "en-US": "🎨 Appearance" })}
-              </div>
+              <div className="panel-header-title">{t({ "zh-CN": "外观", "en-US": "Appearance" })}</div>
               <div className="settings-card-copy">
                 {t({
-                  "zh-CN": "统一调整语言、主题和界面呈现密度。",
-                  "en-US": "Tune language, theme, and interface density from one place."
+                  "zh-CN": "统一调整语言、主题和界面密度。",
+                  "en-US": "Adjust language, theme, and density in one place."
                 })}
               </div>
             </div>
@@ -138,13 +140,11 @@ export function SettingsModule() {
 
           <label className="switch-row settings-switch-card">
             <div>
-              <span className="settings-switch-title">
-                {t({ "zh-CN": "紧凑模式", "en-US": "Compact Mode" })}
-              </span>
+              <span className="settings-switch-title">{t({ "zh-CN": "紧凑模式", "en-US": "Compact Mode" })}</span>
               <div className="settings-switch-copy">
                 {t({
-                  "zh-CN": "缩小间距，让信息展示更加紧凑。",
-                  "en-US": "Reduce spacing for a denser information layout."
+                  "zh-CN": "缩小全局间距，让信息排布更紧凑。",
+                  "en-US": "Reduce global spacing for a denser layout."
                 })}
               </div>
             </div>
@@ -159,9 +159,7 @@ export function SettingsModule() {
         <section className="panel settings-panel">
           <div className="settings-card-head">
             <div>
-              <div className="panel-header-title">
-                {t({ "zh-CN": "🔔 通知", "en-US": "🔔 Notifications" })}
-              </div>
+              <div className="panel-header-title">{t({ "zh-CN": "通知", "en-US": "Notifications" })}</div>
               <div className="settings-card-copy">
                 {t({
                   "zh-CN": "控制消息提醒、声音反馈和离线行为。",
@@ -173,12 +171,10 @@ export function SettingsModule() {
 
           <label className="switch-row settings-switch-card">
             <div>
-              <span className="settings-switch-title">
-                {t({ "zh-CN": "启用通知", "en-US": "Enable Notifications" })}
-              </span>
+              <span className="settings-switch-title">{t({ "zh-CN": "启用通知", "en-US": "Enable Notifications" })}</span>
               <div className="settings-switch-copy">
                 {t({
-                  "zh-CN": "收到新消息和状态变化时显示系统提示。",
+                  "zh-CN": "新消息和状态变化时显示系统提醒。",
                   "en-US": "Show system alerts for new messages and status changes."
                 })}
               </div>
@@ -192,13 +188,11 @@ export function SettingsModule() {
 
           <label className="switch-row settings-switch-card">
             <div>
-              <span className="settings-switch-title">
-                {t({ "zh-CN": "声音提示", "en-US": "Sound Alerts" })}
-              </span>
+              <span className="settings-switch-title">{t({ "zh-CN": "声音提醒", "en-US": "Sound Alerts" })}</span>
               <div className="settings-switch-copy">
                 {t({
-                  "zh-CN": "播放消息和任务状态变化音效。",
-                  "en-US": "Play audible feedback for messages and task changes."
+                  "zh-CN": "为消息和任务状态变化提供声音反馈。",
+                  "en-US": "Play sound feedback for messages and task changes."
                 })}
               </div>
             </div>
@@ -211,13 +205,11 @@ export function SettingsModule() {
 
           <label className="switch-row settings-switch-card">
             <div>
-              <span className="settings-switch-title">
-                {t({ "zh-CN": "离线模式", "en-US": "Offline Mode" })}
-              </span>
+              <span className="settings-switch-title">{t({ "zh-CN": "离线模式", "en-US": "Offline Mode" })}</span>
               <div className="settings-switch-copy">
                 {t({
-                  "zh-CN": "断开连接时保留操作并等待重放。",
-                  "en-US": "Keep actions queued locally while waiting to reconnect."
+                  "zh-CN": "断线时保留发送请求，等待连接恢复后自动补发。",
+                  "en-US": "Queue requests locally while waiting for the connection to recover."
                 })}
               </div>
             </div>
@@ -230,13 +222,11 @@ export function SettingsModule() {
 
           <label className="switch-row settings-switch-card">
             <div>
-              <span className="settings-switch-title">
-                {t({ "zh-CN": "启用工作室", "en-US": "Enable Workspace" })}
-              </span>
+              <span className="settings-switch-title">{t({ "zh-CN": "启用工作室", "en-US": "Enable Workspace" })}</span>
               <div className="settings-switch-copy">
                 {t({
-                  "zh-CN": "显示像素办公室工作室视图。",
-                  "en-US": "Display the pixel office workspace view."
+                  "zh-CN": "优先嵌入 Flask Studio 页面，不可用时回退到本地像素视图。",
+                  "en-US": "Embed the Flask Studio first and fall back to the local pixel view when needed."
                 })}
               </div>
             </div>
@@ -251,35 +241,53 @@ export function SettingsModule() {
         <section className="panel settings-panel">
           <div className="settings-card-head">
             <div>
-              <div className="panel-header-title">
-                {t({ "zh-CN": "🧩 技能管理", "en-US": "🧩 Skill Manager" })}
-              </div>
+              <div className="panel-header-title">{t({ "zh-CN": "技能列表", "en-US": "Skills" })}</div>
               <div className="settings-card-copy">
                 {t({
-                  "zh-CN": "查看当前可用 Agent 技能和安装状态。",
-                  "en-US": "Review available agent skills and their current install status."
+                  "zh-CN": "展示 Gateway 当前返回的 Agent 能力列表。",
+                  "en-US": "Shows the agent capabilities currently reported by the Gateway."
                 })}
               </div>
             </div>
+            <button className="ghost-button settings-action-button" onClick={() => void refreshAgents()}>
+              {t({ "zh-CN": "刷新", "en-US": "Refresh" })}
+            </button>
           </div>
+
           <div className="skill-list settings-skill-list">
-            {agents.map((agent) => (
-              <div key={agent.id} className="skill-card settings-skill-card">
-                <div>
-                  <div className="list-title">
-                    {agent.icon} {agent.name}
-                  </div>
-                  <div className="list-meta">{agent.description}</div>
-                </div>
-                <span className={`badge ${agent.enabled ? "badge-success" : ""}`}>
-                  {agent.installed
-                    ? agent.enabled
-                      ? t({ "zh-CN": "已启用", "en-US": "Enabled" })
-                      : t({ "zh-CN": "未启用", "en-US": "Disabled" })
-                    : t({ "zh-CN": "可安装", "en-US": "Available" })}
-                </span>
+            {agentsLoading && (
+              <div className="empty-state small">
+                {t({ "zh-CN": "正在加载技能列表...", "en-US": "Loading agents..." })}
               </div>
-            ))}
+            )}
+
+            {!agentsLoading &&
+              agents.map((agent) => (
+                <div key={agent.id} className="skill-card settings-skill-card">
+                  <div>
+                    <div className="list-title">
+                      {agent.icon} {agent.name}
+                    </div>
+                    <div className="list-meta">{agent.description}</div>
+                  </div>
+                  <span className={`badge ${agent.enabled ? "badge-success" : ""}`}>
+                    {agent.installed
+                      ? agent.enabled
+                        ? t({ "zh-CN": "已启用", "en-US": "Enabled" })
+                        : t({ "zh-CN": "已安装", "en-US": "Installed" })
+                      : t({ "zh-CN": "可安装", "en-US": "Available" })}
+                  </span>
+                </div>
+              ))}
+
+            {!agentsLoading && !agents.length && (
+              <div className="empty-state small">
+                {t({
+                  "zh-CN": "当前没有从 Gateway 获取到 Agent 列表。",
+                  "en-US": "No agents were returned by the Gateway."
+                })}
+              </div>
+            )}
           </div>
         </section>
       </div>

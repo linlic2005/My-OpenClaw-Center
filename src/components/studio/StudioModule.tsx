@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { pickText } from "../../lib/i18n";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useStudioStore } from "../../stores/studioStore";
@@ -15,8 +15,11 @@ const zoneMap = {
 const zoneOrder = ["lounge", "writing", "research", "execute", "sync", "bug"] as const;
 
 type ZoneKey = (typeof zoneOrder)[number];
+type StudioEmbedStatus = "checking" | "ready" | "fallback";
 
-export function StudioModule() {
+const STUDIO_URL = import.meta.env.VITE_STUDIO_URL ?? "http://localhost:19000";
+
+function WorkspaceFallback() {
   const { agents, load } = useStudioStore();
   const language = useSettingsStore((state) => state.settings.language);
 
@@ -27,11 +30,11 @@ export function StudioModule() {
   const sceneMap = useMemo(
     () => ({
       idle: pickText(language, { "zh-CN": "休息区", "en-US": "Lounge" }),
-      writing: pickText(language, { "zh-CN": "写作工位", "en-US": "Writing Desk" }),
-      researching: pickText(language, { "zh-CN": "检索工位", "en-US": "Research Desk" }),
-      executing: pickText(language, { "zh-CN": "执行工位", "en-US": "Execution Desk" }),
-      syncing: pickText(language, { "zh-CN": "同步工位", "en-US": "Sync Desk" }),
-      error: pickText(language, { "zh-CN": "Bug 区", "en-US": "Bug Zone" })
+      writing: pickText(language, { "zh-CN": "写作位", "en-US": "Writing Desk" }),
+      researching: pickText(language, { "zh-CN": "检索位", "en-US": "Research Desk" }),
+      executing: pickText(language, { "zh-CN": "执行位", "en-US": "Execution Desk" }),
+      syncing: pickText(language, { "zh-CN": "同步站", "en-US": "Sync Desk" }),
+      error: pickText(language, { "zh-CN": "异常区", "en-US": "Bug Zone" })
     }),
     [language]
   );
@@ -44,7 +47,7 @@ export function StudioModule() {
         research: pickText(language, { "zh-CN": "检索位", "en-US": "Research" }),
         execute: pickText(language, { "zh-CN": "执行位", "en-US": "Execute" }),
         sync: pickText(language, { "zh-CN": "同步站", "en-US": "Sync" }),
-        bug: pickText(language, { "zh-CN": "Bug 区", "en-US": "Bug Zone" })
+        bug: pickText(language, { "zh-CN": "异常区", "en-US": "Bug Zone" })
       }) satisfies Record<ZoneKey, string>,
     [language]
   );
@@ -53,28 +56,28 @@ export function StudioModule() {
     () =>
       ({
         lounge: pickText(language, {
-          "zh-CN": "待命或刚完成任务的 Agent 会回到沙发区。",
-          "en-US": "Idle or finished agents return to the sofa corner."
+          "zh-CN": "空闲或已完成的 Agent 会回到休息区待命。",
+          "en-US": "Idle or completed agents return here to wait for the next task."
         }),
         writing: pickText(language, {
-          "zh-CN": "写文档、写代码时停留在这里。",
-          "en-US": "Writing tasks settle into this desk."
+          "zh-CN": "文案整理、方案撰写和结构输出集中在这里。",
+          "en-US": "Writing-heavy tasks settle into this desk."
         }),
         research: pickText(language, {
-          "zh-CN": "调研和搜索时会占用检索屏幕。",
-          "en-US": "Research and search tasks use this terminal."
+          "zh-CN": "检索、比对和资料梳理会停留在检索位。",
+          "en-US": "Search and analysis work stays on the research station."
         }),
         execute: pickText(language, {
-          "zh-CN": "命令执行与操作任务集中在主工位。",
-          "en-US": "Command-heavy work stays on the main rig."
+          "zh-CN": "命令执行、调试和构建会占用主操作位。",
+          "en-US": "Command execution and build work use the main rig."
         }),
         sync: pickText(language, {
-          "zh-CN": "同步与推送动作会跑到数据站。",
-          "en-US": "Sync and push work moves to the data dock."
+          "zh-CN": "同步、推送和状态汇总会汇入同步站。",
+          "en-US": "Sync, push, and aggregation work flows through the dock."
         }),
         bug: pickText(language, {
-          "zh-CN": "异常排查会亮起红色警报。",
-          "en-US": "Red alert lights up when something breaks."
+          "zh-CN": "遇到冲突或错误时会切换到异常区高亮展示。",
+          "en-US": "Errors and conflicts light up the bug zone."
         })
       }) satisfies Record<ZoneKey, string>,
     [language]
@@ -107,22 +110,22 @@ export function StudioModule() {
           </div>
           <div className="section-meta">
             {pickText(language, {
-              "zh-CN": "像素办公室会根据 Agent 状态切换工位，让工作流一眼可见。",
-              "en-US": "This pixel office shifts agents between desks so the whole workflow is visible at a glance."
+              "zh-CN": "当前显示本地 fallback 视图。Flask 子服务可用后会自动切换到 iframe 工作室。",
+              "en-US": "This is the local fallback view. It switches to the Flask iframe automatically once the service is available."
             })}
           </div>
         </div>
         <div className="studio-hero-actions">
           <div className="badge badge-success">
             {pickText(language, {
-              "zh-CN": "Star-Office 风格演绎",
-              "en-US": "Star-Office inspired"
+              "zh-CN": "像素办公室 fallback",
+              "en-US": "Pixel fallback"
             })}
           </div>
           <div className="badge">
             {pickText(language, {
-              "zh-CN": `${agents.length} 个 Agent 在线`,
-              "en-US": `${agents.length} agents online`
+              "zh-CN": `${agents.length} 个 Agent`,
+              "en-US": `${agents.length} agents`
             })}
           </div>
         </div>
@@ -130,12 +133,7 @@ export function StudioModule() {
 
       <div className="office-stage">
         <div className="office-windowband">
-          <span className="office-windowband-title">
-            {pickText(language, {
-              "zh-CN": "OPENCLAW PIXEL OFFICE",
-              "en-US": "OPENCLAW PIXEL OFFICE"
-            })}
-          </span>
+          <span className="office-windowband-title">OPENCLAW PIXEL OFFICE</span>
           <div className="office-windowband-lights">
             <span />
             <span />
@@ -191,7 +189,7 @@ export function StudioModule() {
           <aside className="office-sidebar">
             <section className="office-panel office-panel-note">
               <div className="office-panel-title">
-                {pickText(language, { "zh-CN": "今日便签", "en-US": "Today's Notes" })}
+                {pickText(language, { "zh-CN": "当前便签", "en-US": "Today's Notes" })}
               </div>
               <div className="office-note-stack">
                 {memoItems.map((item, index) => (
@@ -224,4 +222,114 @@ export function StudioModule() {
       </div>
     </div>
   );
+}
+
+export function StudioModule() {
+  const language = useSettingsStore((state) => state.settings.language);
+  const theme = useSettingsStore((state) => state.settings.theme);
+  const studioEnabled = useSettingsStore((state) => state.settings.studioEnabled);
+  const [embedStatus, setEmbedStatus] = useState<StudioEmbedStatus>("checking");
+
+  useEffect(() => {
+    if (!studioEnabled) {
+      setEmbedStatus("fallback");
+      return;
+    }
+
+    let cancelled = false;
+    setEmbedStatus("checking");
+
+    const controller = new AbortController();
+
+    fetch(`${STUDIO_URL}/health`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: controller.signal
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Studio service is unavailable");
+        }
+        if (!cancelled) {
+          setEmbedStatus("ready");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEmbedStatus("fallback");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [language, studioEnabled, theme]);
+
+  const iframeSrc = useMemo(() => {
+    const query = new URLSearchParams({
+      lang: language,
+      theme
+    });
+    return `${STUDIO_URL}/?${query.toString()}`;
+  }, [language, theme]);
+
+  if (!studioEnabled) {
+    return <WorkspaceFallback />;
+  }
+
+  if (embedStatus === "checking") {
+    return (
+      <div className="studio-shell">
+        <div className="panel studio-embed-shell">
+          <div className="section-title">
+            {pickText(language, { "zh-CN": "正在连接工作室子服务", "en-US": "Connecting to Studio service" })}
+          </div>
+          <div className="section-meta">
+            {pickText(language, {
+              "zh-CN": "正在检查本地 Flask 服务是否可用。",
+              "en-US": "Checking whether the local Flask service is available."
+            })}
+          </div>
+          <div className="progress-track large">
+            <div className="progress-bar" style={{ width: "58%" }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (embedStatus === "ready") {
+    return (
+      <div className="studio-shell studio-embed-shell">
+        <div className="panel">
+          <div className="section-header">
+            <div>
+              <div className="section-title">{pickText(language, { "zh-CN": "工作室", "en-US": "Workspace" })}</div>
+              <div className="section-meta">
+                {pickText(language, {
+                  "zh-CN": "已接入 Flask 子服务，下面展示实时像素工作室视图。",
+                  "en-US": "The Flask subservice is active. The live pixel workspace is embedded below."
+                })}
+              </div>
+            </div>
+            <div className="badge badge-success">
+              {pickText(language, { "zh-CN": "iframe 已连接", "en-US": "iframe connected" })}
+            </div>
+          </div>
+        </div>
+
+        <div className="panel studio-embed-card">
+          <iframe
+            title="OpenClaw Studio"
+            src={iframeSrc}
+            className="studio-embed-frame"
+            loading="lazy"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return <WorkspaceFallback />;
 }
