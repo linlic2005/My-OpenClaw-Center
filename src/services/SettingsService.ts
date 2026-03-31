@@ -1,7 +1,7 @@
 import { defaultSettings } from "../data/mock";
 import { gatewayService } from "./GatewayService";
 import { persistenceService } from "./PersistenceService";
-import type { GatewayHealth, SettingsState } from "../types";
+import type { ErrorLogRecord, GatewayHealth, SettingsState } from "../types";
 
 const SETTINGS_KEY = "openclaw.settings";
 
@@ -40,6 +40,17 @@ class SettingsService {
 
   async testConnection(url?: string): Promise<GatewayHealth> {
     return gatewayService.probe(url);
+  }
+
+  async listErrorLogs(limit = 20): Promise<ErrorLogRecord[]> {
+    return persistenceService.listErrorLogs(limit);
+  }
+
+  exportErrorLog(record: ErrorLogRecord): void {
+    downloadJson(`openclaw-error-log-${record.id}.json`, {
+      exportedAt: new Date().toISOString(),
+      log: record
+    });
   }
 
   async exportDiagnostics(state: SettingsState): Promise<void> {

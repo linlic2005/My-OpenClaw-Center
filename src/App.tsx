@@ -14,7 +14,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ModuleTab>("chat");
   const { status, connect, reconnect, hydrate } = useGatewayStore();
   const settings = useSettingsStore((state) => state.settings);
-  const { language, theme, compactMode, gatewayUrl } = settings;
+  const { language, theme, compactMode, gatewayUrl, fontSize } = settings;
 
   useEffect(() => {
     void hydrate().then(() => connect(gatewayUrl)).catch(() => undefined);
@@ -42,6 +42,17 @@ export default function App() {
   useEffect(() => {
     document.body.classList.toggle("compact-mode", compactMode);
   }, [compactMode]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const sizeMap = {
+      small: "14px",
+      medium: "16px",
+      large: "18px"
+    } as const;
+    root.style.fontSize = sizeMap[fontSize];
+    root.dataset.fontSize = fontSize;
+  }, [fontSize]);
 
   const sidebar = useMemo(() => {
     switch (activeTab) {

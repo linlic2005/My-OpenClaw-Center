@@ -48,7 +48,8 @@ function normalizeMessage(
     timestamp: Number(raw.timestamp ?? Date.now()),
     status: (raw.status as MessageState) ?? fallbackStatus,
     mentions: Array.isArray(raw.mentions) ? raw.mentions.map(String) : [],
-    replyTo: raw.replyTo ? String(raw.replyTo) : null
+    replyTo: raw.replyTo ? String(raw.replyTo) : null,
+    attachments: Array.isArray(raw.attachments) ? raw.attachments.map(String) : []
   };
 }
 
@@ -98,7 +99,6 @@ class ChatService {
       ? payload.messages.map((message) => normalizeMessage(message, sessionId))
       : [];
     this.emit();
-
     return [...this.messages[sessionId]];
   }
 
@@ -110,7 +110,10 @@ class ChatService {
     const createdAt = Number(payload.createdAt ?? Date.now());
     const session: Session = {
       id: String(payload.sessionId ?? createId("sess")),
-      name: typeof payload.name === "string" && payload.name.trim() ? payload.name : name?.trim() || fallbackSessionName(this.language),
+      name:
+        typeof payload.name === "string" && payload.name.trim()
+          ? payload.name
+          : name?.trim() || fallbackSessionName(this.language),
       summary: waitingSummary(this.language),
       createdAt,
       updatedAt: createdAt
@@ -135,7 +138,8 @@ class ChatService {
     sessionId: string,
     content: string,
     mentions: string[] = [],
-    replyTo: string | null = null
+    replyTo: string | null = null,
+    attachments: string[] = []
   ): Promise<ChatMessage> {
     const optimistic: ChatMessage = {
       id: createId("msg"),
@@ -144,6 +148,7 @@ class ChatService {
       content,
       mentions,
       replyTo,
+      attachments,
       timestamp: Date.now(),
       status: "sending"
     };
@@ -171,7 +176,8 @@ class ChatService {
         sessionId: message.sessionId,
         content: message.content,
         mentions: message.mentions ?? [],
-        ...(message.replyTo ? { replyTo: message.replyTo } : {})
+        ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+        ...(message.attachments?.length ? { attachments: message.attachments } : {})
       });
 
       const nextId = String(payload.messageId ?? message.id);

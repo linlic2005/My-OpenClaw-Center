@@ -1,14 +1,6 @@
-type ErrorLogLevel = "info" | "warn" | "error";
+import type { ErrorLogRecord } from "../types";
 
-interface ErrorLogRecord {
-  id: string;
-  timestamp: number;
-  level: ErrorLogLevel;
-  module: string;
-  message: string;
-  stack?: string;
-  context?: string;
-}
+type ErrorLogLevel = "info" | "warn" | "error";
 
 interface SqlDatabaseLike {
   execute(query: string, bindValues?: unknown[]): Promise<unknown>;

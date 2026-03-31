@@ -5,11 +5,24 @@ import { useChatStore } from "../../stores/chatStore";
 import { useFileStore } from "../../stores/fileStore";
 import { useGatewayStore } from "../../stores/gatewayStore";
 import { useSettingsStore } from "../../stores/settingsStore";
-import type { ChatMessage } from "../../types";
+import type { ChatMessage, FileItem } from "../../types";
+
+const configPriority = ["USER.md", "SOUL.md", "MEMORY.md"] as const;
 
 function getReplyMessage(messages: ChatMessage[], replyTo: string | null | undefined): ChatMessage | null {
   if (!replyTo) return null;
   return messages.find((item) => item.id === replyTo) ?? null;
+}
+
+function isConfigFile(item: FileItem): boolean {
+  return item.type === "file" && configPriority.includes(item.name.toUpperCase() as (typeof configPriority)[number]);
+}
+
+function getConfigLabel(name: string, language: "zh-CN" | "en-US"): string {
+  if (name.toUpperCase() === "USER.MD") return language === "zh-CN" ? "用户设定" : "User Profile";
+  if (name.toUpperCase() === "SOUL.MD") return language === "zh-CN" ? "人格核心" : "Persona Core";
+  if (name.toUpperCase() === "MEMORY.MD") return language === "zh-CN" ? "长期记忆" : "Memory Store";
+  return name;
 }
 
 export function ChatModule() {
@@ -34,6 +47,7 @@ export function ChatModule() {
   const [sessionQuery, setSessionQuery] = useState("");
   const [replyToId, setReplyToId] = useState<string | null>(null);
   const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
+  const [selectedAttachments, setSelectedAttachments] = useState<FileItem[]>([]);
 
   useEffect(() => {
     void load(language);
@@ -56,6 +70,7 @@ export function ChatModule() {
       setReplyToId(null);
       setShowMention(false);
       setShowAttachmentPicker(false);
+      setSelectedAttachments([]);
     }
   }, [currentSessionId]);
 
@@ -67,9 +82,7 @@ export function ChatModule() {
   const filteredSessions = useMemo(() => {
     const keyword = sessionQuery.trim().toLowerCase();
     if (!keyword) return sessions;
-    return sessions.filter((session) =>
-      `${session.name} ${session.summary}`.toLowerCase().includes(keyword)
-    );
+    return sessions.filter((session) => `${session.name} ${session.summary}`.toLowerCase().includes(keyword));
   }, [sessionQuery, sessions]);
 
   const selectedMentions = useMemo(
@@ -78,16 +91,22 @@ export function ChatModule() {
   );
 
   const attachmentCandidates = useMemo(
-    () => fileItems.filter((item) => item.type === "file").slice(0, 12),
+    () => fileItems.filter(isConfigFile).slice(0, 12),
     [fileItems]
+  );
+
+  const selectedAttachmentIds = useMemo(
+    () => selectedAttachments.map((item) => item.id),
+    [selectedAttachments]
   );
 
   const handleSend = () => {
     if (!currentSession || !currentDraft.trim()) return;
-    void sendMessage(currentSession.id, currentDraft.trim(), selectedMentions, replyToId);
+    void sendMessage(currentSession.id, currentDraft.trim(), selectedMentions, replyToId, selectedAttachmentIds);
     setReplyToId(null);
     setShowMention(false);
     setShowAttachmentPicker(false);
+    setSelectedAttachments([]);
   };
 
   return (
@@ -154,8 +173,8 @@ export function ChatModule() {
                 <div className="section-title">{currentSession.name}</div>
                 <div className="section-meta">
                   {pickText(language, {
-                    "zh-CN": "支持实时 Gateway 消息、Markdown、引用回复、附件入口与离线队列。",
-                    "en-US": "Supports live Gateway messaging, Markdown, quoted replies, attachments, and offline queueing."
+                    "zh-CN": "支持实时 Gateway 消息、Markdown、引用回复和配置文件附件。",
+                    "en-US": "Supports live Gateway messaging, Markdown, quoted replies, and config-file attachments."
                   })}
                 </div>
               </div>
@@ -190,6 +209,16 @@ export function ChatModule() {
                       className="message-body"
                       dangerouslySetInnerHTML={{ __html: renderMiniMarkdown(message.content) }}
                     />
+
+                    {!!message.attachments?.length && (
+                      <div className="mention-tags">
+                        {message.attachments.map((attachmentId) => (
+                          <span key={attachmentId} className="badge">
+                            {pickText(language, { "zh-CN": "配置附件", "en-US": "Config Ref" })} #{attachmentId.slice(-6)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     <div className="message-footer">
                       <span>
@@ -231,9 +260,25 @@ export function ChatModule() {
                 </div>
               )}
 
+              {!!selectedAttachments.length && (
+                <div className="mention-tags">
+                  {selectedAttachments.map((file) => (
+                    <button
+                      key={file.id}
+                      className="link-chip"
+                      onClick={() =>
+                        setSelectedAttachments((current) => current.filter((item) => item.id !== file.id))
+                      }
+                    >
+                      {file.name} · {getConfigLabel(file.name, language)}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="composer-toolbar">
                 <button className="ghost-button" onClick={() => setShowAttachmentPicker((value) => !value)}>
-                  {pickText(language, { "zh-CN": "附件", "en-US": "Attachment" })}
+                  {pickText(language, { "zh-CN": "引用配置", "en-US": "Attach Config" })}
                 </button>
                 <button className="ghost-button" onClick={() => setShowMention((value) => !value)}>
                   {pickText(language, { "zh-CN": "提及 Agent", "en-US": "Mention Agent" })}
@@ -293,30 +338,30 @@ export function ChatModule() {
 
               {showAttachmentPicker && (
                 <div className="mention-panel">
-                  {attachmentCandidates.map((file) => (
-                    <button
-                      key={file.id}
-                      className="mention-item"
-                      onClick={() => {
-                        const snippet =
-                          language === "zh-CN"
-                            ? `\n[附件] ${file.name} (${file.path})`
-                            : `\n[Attachment] ${file.name} (${file.path})`;
-                        setDraft(currentSession.id, `${currentDraft}${snippet}`);
-                        setShowAttachmentPicker(false);
-                      }}
-                    >
-                      <span>F</span>
-                      <span>{file.name}</span>
-                      <span className="muted">{file.path}</span>
-                    </button>
-                  ))}
+                  {attachmentCandidates.map((file) => {
+                    const checked = selectedAttachments.some((item) => item.id === file.id);
+                    return (
+                      <button
+                        key={file.id}
+                        className="mention-item"
+                        onClick={() => {
+                          setSelectedAttachments((current) =>
+                            checked ? current.filter((item) => item.id !== file.id) : [...current, file]
+                          );
+                        }}
+                      >
+                        <span>{checked ? "OK" : "CF"}</span>
+                        <span>{file.name}</span>
+                        <span className="muted">{getConfigLabel(file.name, language)}</span>
+                      </button>
+                    );
+                  })}
 
                   {!attachmentCandidates.length && (
                     <div className="empty-state small">
                       {pickText(language, {
-                        "zh-CN": "没有可附加的文件，请先在文件页加载目录。",
-                        "en-US": "No files are ready to attach yet. Load a directory in Files first."
+                        "zh-CN": "当前目录下没有可引用的 USER / SOUL / MEMORY 配置文件。",
+                        "en-US": "No USER / SOUL / MEMORY config files are available to attach."
                       })}
                     </div>
                   )}

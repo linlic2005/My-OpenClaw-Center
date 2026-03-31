@@ -3,7 +3,7 @@ import { gatewayService } from "../services/GatewayService";
 import { persistenceService } from "../services/PersistenceService";
 import { settingsService } from "../services/SettingsService";
 import { createId } from "../lib/utils";
-import type { ChannelConfig, GatewayHealth, SettingsState } from "../types";
+import type { ChannelConfig, ErrorLogRecord, GatewayHealth, SettingsState } from "../types";
 
 const initialSettings = settingsService.load();
 gatewayService.setUrl(initialSettings.gatewayUrl);
@@ -11,6 +11,9 @@ gatewayService.setUrl(initialSettings.gatewayUrl);
 interface SettingsStore {
   settings: SettingsState;
   connectionTest: GatewayHealth | null;
+  connectionError: string | null;
+  errorLogs: ErrorLogRecord[];
+  dataLoading: boolean;
   update: <K extends keyof SettingsState>(key: K, value: SettingsState[K]) => void;
   addChannel: () => void;
   updateChannel: (channelId: string, patch: Partial<ChannelConfig>) => void;
@@ -18,6 +21,7 @@ interface SettingsStore {
   toggleSkillInstalled: (agentId: string) => void;
   toggleSkillEnabled: (agentId: string) => void;
   resetSettings: () => void;
+  refreshDataManagement: () => Promise<void>;
   exportDiagnostics: () => Promise<void>;
   clearErrorLogs: () => Promise<void>;
   clearOfflineQueue: () => Promise<void>;
@@ -32,6 +36,9 @@ function persistSettings(settings: SettingsState): SettingsState {
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
   settings: initialSettings,
   connectionTest: null,
+  connectionError: null,
+  errorLogs: [],
+  dataLoading: false,
   update(key, value) {
     set((state) => {
       const settings = persistSettings({ ...state.settings, [key]: value });
@@ -113,19 +120,37 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   resetSettings() {
     const settings = settingsService.reset();
     gatewayService.setUrl(settings.gatewayUrl);
-    set({ settings, connectionTest: null });
+    set({ settings, connectionTest: null, connectionError: null });
+  },
+  async refreshDataManagement() {
+    set({ dataLoading: true });
+    const errorLogs = await settingsService.listErrorLogs(200);
+    set({ errorLogs, dataLoading: false });
   },
   async exportDiagnostics() {
     await settingsService.exportDiagnostics(get().settings);
   },
   async clearErrorLogs() {
     await persistenceService.clearErrorLogs();
+    await get().refreshDataManagement();
   },
   async clearOfflineQueue() {
     await gatewayService.clearOfflineQueue();
   },
   async testConnection() {
-    const result = await settingsService.testConnection(get().settings.gatewayUrl);
-    set({ connectionTest: result });
+    try {
+      const result = await settingsService.testConnection(get().settings.gatewayUrl);
+      set({ connectionTest: result, connectionError: null });
+    } catch (error) {
+      set({
+        connectionTest: null,
+        connectionError:
+          error instanceof Error
+            ? error.message
+            : get().settings.language === "zh-CN"
+              ? "连接测试失败"
+              : "Connection test failed"
+      });
+    }
   }
 }));

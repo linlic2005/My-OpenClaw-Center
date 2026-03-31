@@ -186,6 +186,11 @@
   color: #166534;
 }
 
+:root[data-theme="light"] .danger-card {
+  background: rgba(220, 38, 38, 0.1);
+  color: #991b1b;
+}
+
 :root[data-theme="light"] .settings-status-meta {
   color: #166534;
 }
@@ -540,6 +545,91 @@ button { border: 0; cursor: pointer; }
 .settings-panel-wide {
   grid-column: span 2;
 }
+.settings-data-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.settings-log-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+}
+.settings-log-toolbar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: end;
+}
+.settings-log-level-row {
+  flex: 1 1 340px;
+}
+.settings-log-module-filter {
+  flex: 1 1 260px;
+  min-width: min(100%, 320px);
+}
+.settings-log-browser,
+.settings-log-list,
+.settings-log-detail-grid {
+  display: grid;
+  gap: 12px;
+}
+.settings-log-list {
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+.settings-log-entry {
+  width: 100%;
+  text-align: left;
+  border-color: rgba(255, 255, 255, 0.05);
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+.settings-log-entry:hover {
+  border-color: rgba(96, 165, 250, 0.22);
+  transform: translateY(-1px);
+}
+.settings-log-entry-active {
+  border-color: rgba(96, 165, 250, 0.38);
+  background: rgba(37, 99, 235, 0.12);
+}
+.settings-log-detail,
+.settings-log-detail-section {
+  display: grid;
+  gap: 10px;
+}
+.settings-log-detail {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(96, 165, 250, 0.16);
+  background: rgba(37, 99, 235, 0.06);
+}
+.settings-log-detail-section {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(6, 12, 24, 0.34);
+}
+.settings-log-detail-copy {
+  line-height: 1.7;
+}
+.settings-log-detail-code {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.settings-copy-buffer {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+}
 .settings-action-grid .ghost-button {
   flex: 1 1 220px;
 }
@@ -547,6 +637,7 @@ button { border: 0; cursor: pointer; }
 .switch-row { padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
 .segmented-active { background: rgba(37, 99, 235, 0.2); outline: 1px solid rgba(96, 165, 250, 0.35); }
 .success-card { padding: 12px 14px; border-radius: 14px; background: rgba(22, 163, 74, 0.16); color: #d7ffe4; }
+.danger-card { padding: 12px 14px; border-radius: 14px; background: rgba(220, 38, 38, 0.14); color: #fee2e2; }
 .upload-failed {
   border-color: rgba(220, 38, 38, 0.35);
 }
@@ -964,6 +1055,9 @@ body.compact-mode .topbar {
   .detail-span-2 {
     grid-column: auto;
   }
+  .settings-data-grid {
+    grid-template-columns: 1fr;
+  }
   .office-room { min-height: 980px; }
   .office-zone-lounge { left: 18px; top: 34px; width: calc(100% - 36px); }
   .office-zone-writing { left: 18px; top: 230px; width: calc(50% - 24px); }
@@ -1017,9 +1111,123 @@ body.compact-mode .topbar {
   color: var(--text);
 }
 
+.config-chip-button {
+  width: 100%;
+  text-align: left;
+}
+
+.config-chip-button:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+}
+
+.config-chip-meta {
+  font-size: 12px;
+}
+
 .config-chip-active {
   border-color: rgba(96, 165, 250, 0.32);
   background: rgba(37, 99, 235, 0.12);
+}
+
+.config-chip-current {
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.34);
+}
+
+.config-detail-grid,
+.config-outline-grid,
+.config-template-grid,
+.config-section-list {
+  display: grid;
+  gap: 12px;
+}
+
+.config-detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.config-detail-chip,
+.config-template-card,
+.config-section-card,
+.config-empty-note {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.config-detail-chip {
+  display: grid;
+  gap: 6px;
+}
+
+.config-view-switch {
+  width: fit-content;
+}
+
+.config-readable-preview {
+  min-height: 360px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(4, 9, 18, 0.56);
+  line-height: 1.8;
+}
+
+.config-readable-preview h1,
+.config-readable-preview h2,
+.config-readable-preview h3 {
+  margin: 0 0 12px;
+  color: var(--text);
+}
+
+.config-readable-preview ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.config-readable-preview li {
+  margin: 6px 0;
+}
+
+.config-readable-preview code {
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.config-template-card,
+.config-section-card {
+  display: grid;
+  gap: 10px;
+}
+
+.config-template-card-found {
+  border-color: rgba(22, 163, 74, 0.2);
+}
+
+.config-template-card-missing {
+  border-color: rgba(220, 38, 38, 0.18);
+}
+
+.config-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.config-section-range {
+  white-space: nowrap;
+}
+
+.config-section-excerpt {
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.config-empty-note {
+  color: var(--muted);
+  line-height: 1.7;
 }
 
 .studio-embed-shell {
@@ -1041,6 +1249,10 @@ body.compact-mode .topbar {
 
 @media (max-width: 1100px) {
   .config-summary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .config-detail-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -22,7 +22,8 @@ interface ChatStore {
     sessionId: string,
     content: string,
     mentions?: string[],
-    replyTo?: string | null
+    replyTo?: string | null,
+    attachments?: string[]
   ) => Promise<void>;
   retryMessage: (sessionId: string, messageId: string) => Promise<void>;
 }
@@ -99,8 +100,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       return { drafts: nextDrafts };
     });
   },
-  async sendMessage(sessionId, content, mentions = [], replyTo = null) {
-    await chatService.sendMessage(sessionId, content, mentions, replyTo);
+  async sendMessage(sessionId, content, mentions = [], replyTo = null, attachments = []) {
+    await chatService.sendMessage(sessionId, content, mentions, replyTo, attachments);
     set((state) => {
       const nextDrafts = { ...state.drafts, [sessionId]: "" };
       void persistenceService.setJson(DRAFTS_KEY, nextDrafts);

@@ -37,6 +37,7 @@ export interface ChatMessage {
   status?: MessageState;
   mentions?: string[];
   replyTo?: string | null;
+  attachments?: string[];
 }
 
 export interface KanbanLabel {
@@ -108,6 +109,16 @@ export interface DownloadTask {
   fileName: string;
   progress: number;
   status: "running" | "done" | "failed";
+}
+
+export interface ErrorLogRecord {
+  id: string;
+  timestamp: number;
+  level: "info" | "warn" | "error";
+  module: string;
+  message: string;
+  stack?: string;
+  context?: string;
 }
 
 export interface ChannelConfig {
