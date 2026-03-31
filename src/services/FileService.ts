@@ -53,8 +53,10 @@ async function sha256Hex(blob: Blob): Promise<string> {
   return [...new Uint8Array(hashBuffer)].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-async function sha256HexFromBuffer(buffer: ArrayBuffer): Promise<string> {
-  const hashBuffer = await window.crypto.subtle.digest("SHA-256", buffer);
+async function sha256HexFromBuffer(buffer: ArrayBufferLike): Promise<string> {
+  const normalized = new Uint8Array(buffer.byteLength);
+  normalized.set(new Uint8Array(buffer));
+  const hashBuffer = await window.crypto.subtle.digest("SHA-256", normalized);
   return [...new Uint8Array(hashBuffer)].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
@@ -234,7 +236,12 @@ class FileService {
         this.emit();
       }
 
-      const blob = new Blob(chunks);
+      const blobParts: BlobPart[] = chunks.map((chunk) => {
+        const copy = new Uint8Array(chunk.byteLength);
+        copy.set(chunk);
+        return copy.buffer;
+      });
+      const blob = new Blob(blobParts);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;

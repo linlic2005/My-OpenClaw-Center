@@ -294,6 +294,17 @@ button { border: 0; cursor: pointer; }
 .brand-subtitle, .section-meta, .list-meta, .muted, .sidebar-copy { color: var(--muted); }
 .tabs { display: flex; gap: 10px; }
 .tab-button { display: flex; align-items: center; gap: 8px; padding: 10px 14px; color: var(--muted); background: transparent; border-radius: 999px; }
+.tab-icon,
+.topbar-user {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  font-weight: 700;
+}
 .tab-button-active { color: var(--text); background: rgba(37, 99, 235, 0.16); }
 .workspace { display: grid; grid-template-columns: 280px 1fr; gap: 18px; padding: 18px; }
 .sidebar, .panel, .module-main, .detail-panel, .preview-panel, .connection-card, .studio-card, .upload-card { background: var(--bg-surface); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 20px; backdrop-filter: blur(18px); }
@@ -323,16 +334,56 @@ button { border: 0; cursor: pointer; }
 .message-assistant { background: linear-gradient(135deg, rgba(22, 163, 74, 0.14), rgba(22, 163, 74, 0.06)); }
 .message-body { line-height: 1.7; }
 .message-body code, .code-preview { font-family: "JetBrains Mono", "Consolas", monospace; }
+.message-reply-preview,
+.reply-banner {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  background: rgba(37, 99, 235, 0.08);
+}
+.message-reply-preview {
+  margin-bottom: 12px;
+}
 .composer { display: grid; gap: 12px; }
+.composer-toolbar,
+.inline-actions,
+.settings-inline-fields,
+.settings-action-grid,
+.settings-stack {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.settings-stack {
+  flex-direction: column;
+}
+.settings-inline-fields {
+  width: 100%;
+}
+.settings-inline-fields .text-input {
+  flex: 1 1 220px;
+}
 .composer-input { min-height: 120px; resize: vertical; }
 .mention-panel { display: grid; gap: 8px; padding: 10px; border-radius: 16px; border: 1px solid var(--border); background: rgba(6, 12, 24, 0.95); }
 .mention-item { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; color: var(--text); background: rgba(255, 255, 255, 0.02); }
 .badge { width: fit-content; padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); font-size: 12px; }
 .badge-success { background: rgba(22, 163, 74, 0.18); }
+.badge-syncing { background: rgba(202, 138, 4, 0.18); }
+.badge-error { background: rgba(220, 38, 38, 0.18); }
+.badge-idle { background: rgba(148, 163, 184, 0.18); }
 .ghost-button, .primary-button, .segmented, .link-chip, .link-button { padding: 10px 14px; border-radius: 12px; }
 .ghost-button, .segmented, .link-chip, .link-button { color: var(--text); background: rgba(255, 255, 255, 0.06); }
 .ghost-button.danger { background: rgba(220, 38, 38, 0.16); }
 .primary-button { color: white; background: linear-gradient(135deg, var(--primary), var(--primary-strong)); }
+.ghost-button:disabled,
+.primary-button:disabled,
+.segmented:disabled,
+.link-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .link-button, .link-chip { padding: 6px 10px; }
 .kanban-board { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .kanban-column { padding: 14px; border-radius: 18px; border: 1px solid var(--border); background: rgba(255, 255, 255, 0.03); }
@@ -342,6 +393,7 @@ button { border: 0; cursor: pointer; }
 .kanban-card-desc { color: var(--muted); line-height: 1.6; }
 .detail-grid, .settings-grid, .file-grid { display: grid; gap: 16px; }
 .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.detail-span-2 { grid-column: span 2; }
 .label { margin-bottom: 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
 .file-grid { grid-template-columns: 420px 1fr; }
 .code-preview { min-height: 360px; overflow: auto; padding: 16px; border-radius: 16px; background: rgba(4, 9, 18, 0.8); color: #d7e7ff; }
@@ -477,10 +529,27 @@ button { border: 0; cursor: pointer; }
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
 }
+.settings-item-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.03);
+}
+.settings-panel-wide {
+  grid-column: span 2;
+}
+.settings-action-grid .ghost-button {
+  flex: 1 1 220px;
+}
 .field { display: grid; gap: 8px; }
 .switch-row { padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
 .segmented-active { background: rgba(37, 99, 235, 0.2); outline: 1px solid rgba(96, 165, 250, 0.35); }
 .success-card { padding: 12px 14px; border-radius: 14px; background: rgba(22, 163, 74, 0.16); color: #d7ffe4; }
+.upload-failed {
+  border-color: rgba(220, 38, 38, 0.35);
+}
 .studio-hero { display: flex; align-items: center; justify-content: space-between; }
 .studio-shell-office {
   font-family: "Consolas", "Cascadia Mono", "Courier New", monospace;
@@ -891,6 +960,10 @@ body.compact-mode .topbar {
     flex-direction: column;
     align-items: stretch;
   }
+  .settings-panel-wide,
+  .detail-span-2 {
+    grid-column: auto;
+  }
   .office-room { min-height: 980px; }
   .office-zone-lounge { left: 18px; top: 34px; width: calc(100% - 36px); }
   .office-zone-writing { left: 18px; top: 230px; width: calc(50% - 24px); }
@@ -924,6 +997,31 @@ body.compact-mode .topbar {
   display: none;
 }
 
+.config-summary-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.config-chip {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+}
+
+.config-chip strong {
+  color: var(--text);
+}
+
+.config-chip-active {
+  border-color: rgba(96, 165, 250, 0.32);
+  background: rgba(37, 99, 235, 0.12);
+}
+
 .studio-embed-shell {
   display: grid;
   gap: 16px;
@@ -939,6 +1037,12 @@ body.compact-mode .topbar {
   min-height: 780px;
   border: 0;
   background: #08111f;
+}
+
+@media (max-width: 1100px) {
+  .config-summary-card {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 1100px) {

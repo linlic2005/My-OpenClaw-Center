@@ -15,7 +15,7 @@ interface ShellProps {
 const tabLabels: Record<ModuleTab, { icon: string; label: Record<"zh-CN" | "en-US", string> }> = {
   chat: { icon: "C", label: { "zh-CN": "聊天", "en-US": "Chat" } },
   kanban: { icon: "K", label: { "zh-CN": "看板", "en-US": "Kanban" } },
-  files: { icon: "F", label: { "zh-CN": "文件", "en-US": "Files" } },
+  files: { icon: "F", label: { "zh-CN": "配置", "en-US": "Configs" } },
   studio: { icon: "W", label: { "zh-CN": "工作室", "en-US": "Workspace" } },
   settings: { icon: "S", label: { "zh-CN": "设置", "en-US": "Settings" } }
 };

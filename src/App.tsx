@@ -84,14 +84,14 @@ export default function App() {
           <div className="sidebar-card">
             <div className="sidebar-title">
               {pickText(language, {
-                "zh-CN": "文件导航",
-                "en-US": "File Navigation"
+                "zh-CN": "配置导航",
+                "en-US": "Config Navigation"
               })}
             </div>
             <div className="sidebar-copy">
               {pickText(language, {
-                "zh-CN": "目录浏览、分片上传和真实下载链路都从这里发起。",
-                "en-US": "Directory browsing, chunked uploads, and real downloads all start here."
+                "zh-CN": "这里主要用于查看 Agent 的 USER.md、SOUL.md、MEMORY.md 等核心配置文件。",
+                "en-US": "This area is focused on Agent config files such as USER.md, SOUL.md, and MEMORY.md."
               })}
             </div>
           </div>
