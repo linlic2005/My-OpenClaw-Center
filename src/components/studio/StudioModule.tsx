@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { pickText } from "../../lib/i18n";
+import { studioService } from "../../services/StudioService";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useStudioStore } from "../../stores/studioStore";
 
@@ -17,15 +18,16 @@ const zoneOrder = ["lounge", "writing", "research", "execute", "sync", "bug"] as
 type ZoneKey = (typeof zoneOrder)[number];
 type StudioEmbedStatus = "checking" | "ready" | "fallback";
 
-const STUDIO_URL = import.meta.env.VITE_STUDIO_URL ?? "http://localhost:19000";
-
 function WorkspaceFallback() {
   const { agents, load } = useStudioStore();
-  const language = useSettingsStore((state) => state.settings.language);
+  const { language, studioUrl } = useSettingsStore((state) => ({
+    language: state.settings.language,
+    studioUrl: state.settings.studioUrl
+  }));
 
   useEffect(() => {
-    void load(language);
-  }, [language, load]);
+    void load(language, studioUrl);
+  }, [language, load, studioUrl]);
 
   const sceneMap = useMemo(
     () => ({
@@ -225,9 +227,12 @@ function WorkspaceFallback() {
 }
 
 export function StudioModule() {
-  const language = useSettingsStore((state) => state.settings.language);
-  const theme = useSettingsStore((state) => state.settings.theme);
-  const studioEnabled = useSettingsStore((state) => state.settings.studioEnabled);
+  const { language, theme, studioEnabled, studioUrl } = useSettingsStore((state) => ({
+    language: state.settings.language,
+    theme: state.settings.theme,
+    studioEnabled: state.settings.studioEnabled,
+    studioUrl: state.settings.studioUrl
+  }));
   const [embedStatus, setEmbedStatus] = useState<StudioEmbedStatus>("checking");
 
   useEffect(() => {
@@ -240,8 +245,9 @@ export function StudioModule() {
     setEmbedStatus("checking");
 
     const controller = new AbortController();
+    studioService.setBaseUrl(studioUrl);
 
-    fetch(`${STUDIO_URL}/health`, {
+    fetch(`${studioUrl}/health`, {
       method: "GET",
       headers: { Accept: "application/json" },
       signal: controller.signal
@@ -264,15 +270,15 @@ export function StudioModule() {
       cancelled = true;
       controller.abort();
     };
-  }, [language, studioEnabled, theme]);
+  }, [language, studioEnabled, studioUrl, theme]);
 
   const iframeSrc = useMemo(() => {
     const query = new URLSearchParams({
       lang: language,
       theme
     });
-    return `${STUDIO_URL}/?${query.toString()}`;
-  }, [language, theme]);
+    return `${studioUrl}/?${query.toString()}`;
+  }, [language, studioUrl, theme]);
 
   if (!studioEnabled) {
     return <WorkspaceFallback />;

@@ -1,4 +1,5 @@
 import { createId } from "../lib/utils";
+import { getDefaultDeploymentMode, getPresetEndpoints } from "../config/runtime";
 import { persistenceService } from "./PersistenceService";
 import type {
   AgentProfile,
@@ -50,7 +51,7 @@ export class GatewayRequestError extends Error {
   }
 }
 
-const DEFAULT_URL = import.meta.env.VITE_WS_URL ?? "ws://192.168.123.115:18789";
+const DEFAULT_URL = getPresetEndpoints(getDefaultDeploymentMode()).gatewayUrl;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const OFFLINE_QUEUE_KEY = "gateway.offlineQueue";

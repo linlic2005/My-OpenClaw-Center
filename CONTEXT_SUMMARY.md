@@ -124,6 +124,11 @@ Still pending / reasonable next steps:
   - richer config metadata summary
   - readable / outline / raw viewing modes
   - template-style structure coverage checks for USER.md / SOUL.md / MEMORY.md
+- Deployment adaptation
+  - supports local / remote / custom deployment modes
+  - Gateway URL and Studio URL are both configurable in Settings
+  - Workspace no longer assumes localhost-only Studio
+  - README rewritten with features, deployment, and module usage
 
 ## Files changed recently
 

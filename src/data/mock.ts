@@ -9,6 +9,7 @@ import type {
   StudioAgentStatus
 } from "../types";
 import type { AppLanguage } from "../lib/i18n";
+import { getDefaultDeploymentMode, getPresetEndpoints } from "../config/runtime";
 
 const baseTime = Date.now();
 
@@ -254,9 +255,14 @@ export function getMockStudioAgents(language: AppLanguage): StudioAgentStatus[] 
   ];
 }
 
+const defaultDeploymentMode = getDefaultDeploymentMode();
+const defaultEndpoints = getPresetEndpoints(defaultDeploymentMode);
+
 export const defaultSettings: SettingsState = {
   language: "zh-CN",
-  gatewayUrl: "ws://192.168.123.115:18789",
+  deploymentMode: defaultDeploymentMode,
+  gatewayUrl: defaultEndpoints.gatewayUrl,
+  studioUrl: defaultEndpoints.studioUrl,
   proxyMode: "none",
   theme: "system",
   accent: "#2563eb",

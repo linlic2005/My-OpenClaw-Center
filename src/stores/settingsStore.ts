@@ -1,9 +1,10 @@
 import { create } from "zustand";
+import { getPresetEndpoints, inferDeploymentMode } from "../config/runtime";
 import { gatewayService } from "../services/GatewayService";
 import { persistenceService } from "../services/PersistenceService";
 import { settingsService } from "../services/SettingsService";
 import { createId } from "../lib/utils";
-import type { ChannelConfig, ErrorLogRecord, GatewayHealth, SettingsState } from "../types";
+import type { ChannelConfig, DeploymentMode, ErrorLogRecord, GatewayHealth, SettingsState } from "../types";
 
 const initialSettings = settingsService.load();
 gatewayService.setUrl(initialSettings.gatewayUrl);
@@ -20,6 +21,7 @@ interface SettingsStore {
   removeChannel: (channelId: string) => void;
   toggleSkillInstalled: (agentId: string) => void;
   toggleSkillEnabled: (agentId: string) => void;
+  applyDeploymentMode: (mode: DeploymentMode) => void;
   resetSettings: () => void;
   refreshDataManagement: () => Promise<void>;
   exportDiagnostics: () => Promise<void>;
@@ -41,7 +43,16 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   dataLoading: false,
   update(key, value) {
     set((state) => {
-      const settings = persistSettings({ ...state.settings, [key]: value });
+      const draft = { ...state.settings, [key]: value };
+
+      if (key === "gatewayUrl" || key === "studioUrl") {
+        draft.deploymentMode = inferDeploymentMode(
+          key === "gatewayUrl" ? String(value) : draft.gatewayUrl,
+          key === "studioUrl" ? String(value) : draft.studioUrl
+        );
+      }
+
+      const settings = persistSettings(draft);
       if (key === "gatewayUrl") {
         gatewayService.setUrl(String(value));
       }
@@ -115,6 +126,31 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         ]
       });
       return { settings };
+    });
+  },
+  applyDeploymentMode(mode) {
+    set((state) => {
+      if (mode === "custom") {
+        const settings = persistSettings({
+          ...state.settings,
+          deploymentMode: "custom"
+        });
+        return { settings };
+      }
+
+      const preset = getPresetEndpoints(mode);
+      const settings = persistSettings({
+        ...state.settings,
+        deploymentMode: mode,
+        gatewayUrl: preset.gatewayUrl,
+        studioUrl: preset.studioUrl
+      });
+      gatewayService.setUrl(settings.gatewayUrl);
+      return {
+        settings,
+        connectionTest: null,
+        connectionError: null
+      };
     });
   },
   resetSettings() {

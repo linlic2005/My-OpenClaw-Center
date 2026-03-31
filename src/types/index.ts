@@ -5,6 +5,7 @@ export type ConnectionStatus =
   | "reconnecting";
 
 export type ModuleTab = "chat" | "kanban" | "files" | "studio" | "settings";
+export type DeploymentMode = "local" | "remote" | "custom";
 
 export type MessageRole = "user" | "assistant" | "system";
 
@@ -135,7 +136,9 @@ export interface SkillPreference {
 
 export interface SettingsState {
   language: "zh-CN" | "en-US";
+  deploymentMode: DeploymentMode;
   gatewayUrl: string;
+  studioUrl: string;
   proxyMode: "none" | "http" | "socks";
   theme: "light" | "dark" | "system";
   accent: string;

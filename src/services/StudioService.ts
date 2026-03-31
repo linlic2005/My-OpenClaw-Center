@@ -1,8 +1,7 @@
 import { getMockStudioAgents } from "../data/mock";
+import { getDefaultDeploymentMode, getPresetEndpoints } from "../config/runtime";
 import type { AppLanguage } from "../lib/i18n";
 import type { StudioAgentStatus, StudioHealth } from "../types";
-
-const STUDIO_URL = import.meta.env.VITE_STUDIO_URL ?? "http://localhost:19000";
 
 function normalizeLocale(value: unknown, language: AppLanguage): StudioAgentStatus["locale"] {
   if (value === "CN" || value === "EN" || value === "JP") return value;
@@ -41,17 +40,25 @@ function normalizeAgent(raw: unknown, language: AppLanguage): StudioAgentStatus 
 
 class StudioService {
   private language: AppLanguage = "zh-CN";
+  private baseUrl = getPresetEndpoints(getDefaultDeploymentMode()).studioUrl;
 
   setLanguage(language: AppLanguage): void {
     this.language = language;
   }
 
+  setBaseUrl(url: string): void {
+    const nextUrl = url.trim();
+    if (nextUrl) {
+      this.baseUrl = nextUrl;
+    }
+  }
+
   getBaseUrl(): string {
-    return STUDIO_URL;
+    return this.baseUrl;
   }
 
   async checkHealth(): Promise<StudioHealth> {
-    const response = await fetch(`${STUDIO_URL}/health`, {
+    const response = await fetch(`${this.baseUrl}/health`, {
       headers: { Accept: "application/json" }
     });
 
@@ -64,7 +71,7 @@ class StudioService {
 
   async listAgents(): Promise<StudioAgentStatus[]> {
     try {
-      const response = await fetch(`${STUDIO_URL}/api/status/all`, {
+      const response = await fetch(`${this.baseUrl}/api/status/all`, {
         headers: { Accept: "application/json" }
       });
 
