@@ -1,3 +1,6 @@
+[![English](https://img.shields.io/badge/README-English-2563eb?style=for-the-badge)](./README.md)
+[![中文](https://img.shields.io/badge/README-%E4%B8%AD%E6%96%87-16a34a?style=for-the-badge)](./README.zh-CN.md)
+
 # OpenClaw Center
 
 OpenClaw Center is a React + TypeScript + Tauri 2 desktop client for OpenClaw.
