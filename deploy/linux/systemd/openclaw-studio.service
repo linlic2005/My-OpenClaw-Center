@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenClaw Studio
+After=network.target
+
+[Service]
+Type=simple
+User=openclaw
+Group=openclaw
+WorkingDirectory=/opt/openclaw-center/studio
+EnvironmentFile=/opt/openclaw-center/studio/.env
+ExecStart=/opt/openclaw-center/studio/.venv/bin/gunicorn --workers 2 --bind 127.0.0.1:19000 wsgi:app
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

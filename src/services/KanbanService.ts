@@ -216,6 +216,7 @@ class KanbanService {
 
   private bindGatewayEvents(): void {
     gatewayService.on<{ card?: unknown }>("kanban.card_created", ({ payload }) => {
+      if (!payload) return;
       if (!payload.card) return;
       const card = normalizeCard(payload.card);
       this.cards = [...this.cards.filter((item) => item.id !== card.id), { ...card, syncStatus: "idle" }];
@@ -228,6 +229,7 @@ class KanbanService {
       toIndex?: unknown;
       version?: unknown;
     }>("kanban.card_moved", ({ payload }) => {
+      if (!payload) return;
       const cardId = String(payload.cardId ?? "");
       if (!cardId) return;
       this.cards = this.cards.map((item) =>
@@ -245,6 +247,7 @@ class KanbanService {
     });
 
     gatewayService.on<{ cardId?: unknown; serverState?: unknown }>("kanban.conflict", ({ payload }) => {
+      if (!payload) return;
       const cardId = String(payload.cardId ?? "");
       if (!cardId) return;
 

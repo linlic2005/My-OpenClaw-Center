@@ -203,6 +203,7 @@ class ChatService {
     gatewayService.on<{ sessionId?: unknown; message?: Record<string, unknown> }>(
       "chat.new_message",
       ({ payload }) => {
+        if (!payload) return;
         const sessionId = String(payload.sessionId ?? "");
         if (!sessionId || !payload.message) return;
 
@@ -219,6 +220,7 @@ class ChatService {
     gatewayService.on<{ sessionId?: unknown; messageId?: unknown; updates?: Record<string, unknown> }>(
       "chat.message_updated",
       ({ payload }) => {
+        if (!payload) return;
         const sessionId = String(payload.sessionId ?? "");
         const messageId = String(payload.messageId ?? "");
         if (!sessionId || !messageId || !payload.updates) return;

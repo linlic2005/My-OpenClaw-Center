@@ -8,6 +8,7 @@ Last updated: 2026-04-01
 - File module is for viewing Agent config files, especially `USER.md`, `SOUL.md`, and `MEMORY.md`.
 - Studio only supports Chinese and English. Do not add Japanese.
 - Prefer direct implementation over giving plans only.
+- Keep deployment documentation synchronized between `README.md` and `README.zh-CN.md`.
 
 ## Current project state
 
@@ -15,6 +16,33 @@ Last updated: 2026-04-01
 - Build status: `npx tsc --noEmit` passes, `npm run build` passes
 - Real Gateway skeleton is already in place
 - Studio Flask iframe + local fallback is already in place
+- Browser-based deployment is viable; Tauri is not required for remote UI access
+
+## Deployment constraints
+
+- Prefer same-origin deployment behind a reverse proxy:
+  - UI at `/`
+  - Gateway WebSocket at `/gateway/`
+  - Studio at `/studio`
+- `Chat`, `Kanban`, and `Files` depend on Gateway connectivity.
+- `Workspace` iframe depends on Studio availability and must keep the local fallback working.
+- Deployment templates and guidance now live in:
+  - `SKILL.md`
+  - `deploy/linux/README.zh-CN.md`
+  - `deploy/linux/.env.production.example`
+  - `deploy/linux/nginx/openclaw-center.conf`
+  - `deploy/linux/systemd/openclaw-studio.service`
+  - `deploy/linux/systemd/openclaw-studio.env.example`
+- Do not assume raw public exposure of `18789` and `19000` is the preferred production topology; same-origin reverse proxy is the default target.
+- Do not assume Studio is mandatory for the whole app to function; only Workspace embed depends on it.
+
+## Current Gateway / deployment findings
+
+- The Gateway in the current environment is OpenClaw Gateway, not a generic unauthenticated WebSocket mock.
+- The local OpenClaw config currently uses `gateway.auth.mode = token`; do not write secrets into repo files or docs.
+- The local Gateway can emit `connect.challenge` immediately after WebSocket connect, so the frontend must not assume `gateway.get_status` works before authentication/handshake.
+- Operator-facing RPC may require approved scopes such as `operator.read`; do not assume all paired tokens can call all methods.
+- Current API material documents core RPCs like `gateway.get_agents`, but does not clearly document skill install/uninstall/enable/disable or channel CRUD. Do not invent undocumented Gateway methods.
 
 ## Completed work
 

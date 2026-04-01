@@ -1,13 +1,14 @@
 import { create } from "zustand";
 import { getPresetEndpoints, inferDeploymentMode } from "../config/runtime";
-import { gatewayService } from "../services/GatewayService";
+import { createId } from "../lib/utils";
+import { gatewayService, GatewayRequestError } from "../services/GatewayService";
 import { persistenceService } from "../services/PersistenceService";
 import { settingsService } from "../services/SettingsService";
-import { createId } from "../lib/utils";
 import type { ChannelConfig, DeploymentMode, ErrorLogRecord, GatewayHealth, SettingsState } from "../types";
 
 const initialSettings = settingsService.load();
 gatewayService.setUrl(initialSettings.gatewayUrl);
+void gatewayService.setAuthToken(initialSettings.gatewayAuthToken);
 
 interface SettingsStore {
   settings: SettingsState;
@@ -35,6 +36,31 @@ function persistSettings(settings: SettingsState): SettingsState {
   return settings;
 }
 
+function formatConnectionError(error: unknown, language: SettingsState["language"]): string {
+  if (error instanceof GatewayRequestError) {
+    const lines = [
+      error.message || (language === "zh-CN" ? "连接测试失败" : "Connection test failed"),
+      `code: ${error.code}`
+    ];
+
+    if (error.payload !== undefined) {
+      try {
+        lines.push(`payload: ${JSON.stringify(error.payload, null, 2)}`);
+      } catch {
+        lines.push(`payload: ${String(error.payload)}`);
+      }
+    }
+
+    return lines.join("\n");
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return language === "zh-CN" ? "连接测试失败" : "Connection test failed";
+}
+
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
   settings: initialSettings,
   connectionTest: null,
@@ -56,6 +82,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       if (key === "gatewayUrl") {
         gatewayService.setUrl(String(value));
       }
+      if (key === "gatewayAuthToken") {
+        void gatewayService.setAuthToken(String(value));
+      }
+
       return { settings };
     });
   },
@@ -67,7 +97,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           ...state.settings.channels,
           {
             id: createId("channel"),
-            name: state.settings.language === "zh-CN" ? "新渠道" : "New Channel",
+            name: state.settings.language === "zh-CN" ? "新频道" : "New Channel",
             tokenPreview: "tok_****"
           }
         ]
@@ -146,6 +176,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         studioUrl: preset.studioUrl
       });
       gatewayService.setUrl(settings.gatewayUrl);
+
       return {
         settings,
         connectionTest: null,
@@ -156,6 +187,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   resetSettings() {
     const settings = settingsService.reset();
     gatewayService.setUrl(settings.gatewayUrl);
+    void gatewayService.setAuthToken(settings.gatewayAuthToken);
     set({ settings, connectionTest: null, connectionError: null });
   },
   async refreshDataManagement() {
@@ -180,12 +212,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     } catch (error) {
       set({
         connectionTest: null,
-        connectionError:
-          error instanceof Error
-            ? error.message
-            : get().settings.language === "zh-CN"
-              ? "连接测试失败"
-              : "Connection test failed"
+        connectionError: formatConnectionError(error, get().settings.language)
       });
     }
   }

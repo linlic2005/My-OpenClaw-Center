@@ -3,18 +3,18 @@
 
 # OpenClaw Center
 
-OpenClaw Center 是一个基于 React + TypeScript + Tauri 2 的 OpenClaw 桌面客户端。
+OpenClaw Center 是一个基于 React + TypeScript + Tauri 2 的 OpenClaw 客户端。
 
-它现在支持两种主要部署方式：
+它同时面向两种部署形态：
 
 1. 纯本地部署
-   Gateway 和 Studio 与桌面客户端运行在同一台机器上。
+   Gateway 和 Studio 与客户端运行在同一台机器上。
 2. Windows 客户端 + Linux 服务器
-   桌面客户端运行在 Windows，Gateway 和可选的 Studio 运行在 Linux 服务器上。
+   客户端运行在 Windows 上，Gateway 和可选的 Studio 运行在 Linux 服务器上。
 
-项目已经同时保留了这两种模式，并通过环境变量预设和应用内的部署切换来管理。
+项目现在已经切换到官方 OpenClaw Gateway 连接方式，不再使用旧的“连接后直接调用 `gateway.get_status`”流程。
 
-## 功能说明
+## 功能
 
 ### 核心模块
 
@@ -23,57 +23,33 @@ OpenClaw Center 是一个基于 React + TypeScript + Tauri 2 的 OpenClaw 桌面
 - Kanban
   基于真实 Gateway 的看板模块，支持卡片加载、创建、编辑、移动、删除和冲突处理。
 - Files
-  专注于 `USER.md`、`SOUL.md`、`MEMORY.md` 的 Agent 配置查看器，支持元数据卡片、可读视图、结构视图、原始视图和导出。
+  面向 `USER.md`、`SOUL.md`、`MEMORY.md` 的配置文件查看与导出。
 - Workspace
-  当 Studio 服务可访问时嵌入远程 iframe；不可访问时回退到本地内置工作区视图。
+  可嵌入远程 Studio，也可回退到内置本地视图。
 - Settings
-  支持部署模式切换、Gateway/Studio 地址配置、外观设置、运行时设置、诊断导出、错误日志和离线队列查看。
+  支持部署切换、Gateway/Studio 地址、Gateway Token、外观设置、诊断和离线队列查看。
 
-### 稳定性能力
+### 可靠性能力
 
-- 真实 WebSocket Gateway 连接
+- 官方 OpenClaw Gateway 握手流程：`connect.challenge` + `req/connect`
 - 心跳与自动重连
 - 离线队列持久化
 - 错误日志持久化
-- 设置与聊天草稿持久化
-- Tauri SQL 回退到 localStorage
+- 设置和聊天草稿持久化
+- paired-device token 持久化与后续复用
+- Tauri SQL 不可用时自动回退到 `localStorage`
 
-## 当前各模块状态
-
-### 目前已支持远程使用的核心能力
+## 当前远程能力
 
 - Chat
 - Kanban
-- 配置文件查看和文件导出/下载
+- 配置文件目录浏览、导出和下载
 - Gateway 连接检测
-- 通过 `gateway.get_agents` 获取 Agent 列表
+- 通过 `agents.list` 获取 Agent 列表
 
-### 当前仍为本地偏好状态的 UI
+## 环境变量
 
-- Settings 中的技能安装 / 卸载 / 启用 / 停用
-  目前只是本地偏好状态，不会真正调用远程技能安装协议。
-- Settings 中的频道管理
-  目前是本地管理，不会真正调用远程频道 CRUD。
-
-### Workspace 行为
-
-- 如果 `Studio URL` 可访问，Workspace 会自动嵌入远程 Studio 页面。
-- 如果 `Studio URL` 不可访问，或关闭了嵌入，则会回退到本地工作区视图。
-
-## 部署模式
-
-应用内 Settings 支持三种运行模式：
-
-- `Local`
-  使用 `.env` 中的本地预设
-- `Remote`
-  使用 `.env` 中的远程预设
-- `Custom`
-  手动分别填写 `Gateway URL` 和 `Studio URL`
-
-## 环境变量配置
-
-将 `.env.example` 复制为 `.env`，然后按实际环境修改：
+复制 `.env.example` 为 `.env` 后按实际环境调整：
 
 ```env
 VITE_DEFAULT_DEPLOYMENT_MODE=local
@@ -85,53 +61,86 @@ VITE_APP_NAME=OpenClaw Center
 VITE_APP_VERSION=1.0.0
 ```
 
-### 推荐配置
+首次远程连接时，请在 Settings 中填写 Gateway 发放的 onboarding token。
+客户端会把它仅保存在本机，并按官方协议放入 `connect.auth.token`；诊断导出会自动脱敏。
+首次连接成功后，Gateway 返回的 paired-device token 也会被持久化，后续重连优先复用。
 
-#### 纯本地部署
+## 部署方式
 
-```env
-VITE_DEFAULT_DEPLOYMENT_MODE=local
-VITE_LOCAL_WS_URL=ws://127.0.0.1:18789
-VITE_LOCAL_STUDIO_URL=http://127.0.0.1:19000
-```
-
-#### Windows 客户端 + Linux 服务器
-
-```env
-VITE_DEFAULT_DEPLOYMENT_MODE=remote
-VITE_REMOTE_WS_URL=ws://YOUR_LINUX_HOST:18789
-VITE_REMOTE_STUDIO_URL=http://YOUR_LINUX_HOST:19000
-```
-
-如果是生产环境，建议优先使用 `wss://` 和 `https://`。
-
-## 如何部署
-
-### 方案一：纯本地部署
+### 方案 1：纯本地部署
 
 1. 在本机启动 OpenClaw Gateway。
-2. 如果需要 iframe 工作区，再在本机启动 Studio。
-3. 将 `.env` 中的本地地址配置成 `127.0.0.1`。
-4. 启动桌面客户端。
-5. 在 Settings 里保持 `Deployment Mode = Local`。
+2. 如果需要 iframe Workspace，再启动本机 Studio。
+3. 将 `.env` 中的本地地址配置为 `127.0.0.1`。
+4. 启动客户端。
+5. 在 Settings 中保持 `Deployment Mode = Local`。
 
-### 方案二：Windows 桌面客户端 + Linux 服务器
+### 方案 2：Windows 客户端 + Linux 服务器
 
-1. 在 Linux 上部署 OpenClaw Gateway，并开放对应 WebSocket 端口。
-2. 如果需要 iframe 工作区，在 Linux 上部署 Studio。
-3. 确保 Windows 机器可以访问 Linux 服务器。
-4. 打开服务器防火墙和安全组端口。
-5. 在 `.env` 中填入远程 Gateway 和 Studio 地址。
-6. 在 Windows 上构建并启动桌面客户端。
-7. 在 Settings 里切换到 `Remote`，或者改成 `Custom` 手动填写地址。
+1. 在 Linux 上部署 OpenClaw Gateway，并暴露其 WebSocket 入口。
+2. 如果需要 iframe Workspace，再部署 Studio。
+3. 如果不是 localhost，请优先使用 HTTPS 页面和 `wss://` Gateway。
+4. 确保 Windows 机器可以访问 Linux 服务器。
+5. 放通所需端口和安全组规则。
+6. 在 `.env` 中填写远程 Gateway 和 Studio 地址，或填写反向代理路径。
+7. 构建并运行客户端。
+8. 在 Settings 中切换到 `Remote`，或者使用 `Custom` 手动填写地址。
+9. 在 `Gateway Token` 中输入首次连接需要的 onboarding token。
+10. 如果 Gateway 开启了手动设备审批，请在服务器端批准新的 operator 设备后再重试一次。
 
-### Linux 服务器检查项
+### 方案 2A：通过 SSH 隧道连接 Linux 服务器
 
-- Gateway 必须暴露客户端实际访问的 WebSocket 地址
-- 如果要用 Workspace iframe，Studio 必须暴露 `/health` 和主页面
-- 如果 Studio 是跨域地址，必须允许被 iframe 嵌入
-- 反向代理、CSP、`X-Frame-Options` 不能阻止嵌入
-- 如果使用 HTTPS，需要保证 Windows 客户端信任证书
+如果 Linux 上的 Gateway 或 Studio 只监听 `127.0.0.1`，而且不能改成 `0.0.0.0`，推荐使用这个方案。
+
+```powershell
+ssh -N -L 18789:127.0.0.1:18789 -L 19000:127.0.0.1:19000 your-user@YOUR_LINUX_HOST
+```
+
+然后在 Settings 中使用：
+
+```text
+Gateway URL: ws://127.0.0.1:18789
+Studio URL:  http://127.0.0.1:19000
+```
+
+## Gateway 认证说明
+
+- OpenClaw Gateway 不再支持“连上 WebSocket 后直接调用 `gateway.get_status`”这种旧流程。
+- 客户端现在按官方方式连接：先接收 `connect.challenge`，再发送 `req/connect`，并在 `hello-ok` 后持久化 paired-device token。
+- `Gateway Token` 主要用于首连或 token 保护的服务器。只有在设备已经配对过，或者服务端明确允许本地不安全认证时，才可以留空。
+- 如果服务端返回 paired-device token 失效，客户端会自动清除本地缓存，并回退到共享 Gateway token 再试一次。
+
+## Linux 服务器检查清单
+
+- Gateway 必须暴露客户端真正访问的 WebSocket 地址。
+- 远程浏览器客户端建议使用 HTTPS/WSS，这样 WebCrypto 设备签名才能在安全上下文中工作。
+- Studio 如果要被嵌入，必须暴露 `/health` 和主页面。
+- 如果 Studio 跨域，需确认 iframe、CSP 和 `X-Frame-Options` 不会阻止嵌入。
+- 如果使用 HTTPS，请确认 Windows 客户端信任证书。
+
+## 使用 OpenClaw 完成 Linux 部署
+
+如果你希望 OpenClaw 直接接管部署流程，请使用根目录下的 [SKILL.md](./SKILL.md)。
+它会引导 OpenClaw agent 完成 Linux 端部署，包括前端构建、生产地址设置、Nginx 反向代理、Studio 服务化，以及从 Windows 浏览器访问时的验证步骤。
+
+推荐提示词：
+
+```text
+使用根目录 ./SKILL.md 中的部署技能，完成这个仓库在 Linux 服务器上的端到端部署。
+
+目标：
+- 把 OpenClaw Center 的 UI 部署到我的 Linux 服务器
+- 让 OpenClaw Gateway 和 Studio 运行在同一台 Linux 服务器上
+- 让我能从 Windows 浏览器访问并操作
+
+要求：
+- 优先使用 Nginx 同域反向代理
+- 前端按 remote 模式构建
+- Gateway 配置到 /gateway/，Studio 配置到 /studio
+- 完成仓库内所需的配置和文档更新
+- 如果当前没有服务器权限，就先完成仓库侧准备并给出精确命令
+- 最后给我一份验证清单和剩余手动步骤
+```
 
 ## 本地开发
 
@@ -165,54 +174,8 @@ npm run tauri dev
 npm run build
 ```
 
-## 各模块如何使用
+### 测试
 
-### Chat
-
-- 打开 Chat 标签
-- 创建或选择一个会话
-- 输入消息后按 `Enter` 发送
-- 使用 `Shift+Enter` 换行
-- 按需使用引用回复和提及
-- 可附加 `USER.md`、`SOUL.md`、`MEMORY.md` 等配置文件
-
-### Kanban
-
-- 打开 Kanban 标签
-- 在列中创建卡片
-- 编辑标题和描述
-- 跨列移动卡片
-- 如果服务器返回冲突状态，可在界面中处理冲突
-
-### Files
-
-- 打开 Files 标签
-- 浏览 Agent 目录
-- 选择 `USER.md`、`SOUL.md` 或 `MEMORY.md`
-- 使用：
-  - `Readable` 查看更适合阅读的内容
-  - `Outline` 查看结构和覆盖情况
-  - `Raw` 查看原始内容
-- 需要时导出副本
-
-### Workspace
-
-- 打开 Workspace 标签
-- 如果 `Studio URL` 可访问，会自动嵌入远程 Studio 页面
-- 如果不可访问，会自动回退到本地内置工作区视图
-- 也可以在 Settings 中关闭嵌入，始终使用回退视图
-
-### Settings
-
-- 在 `Local`、`Remote`、`Custom` 之间切换部署模式
-- 编辑 `Gateway URL` 和 `Studio URL`
-- 测试 Gateway 连通性
-- 调整主题、语言、字号和紧凑模式
-- 查看错误日志和离线队列
-- 导出诊断包
-
-## 说明
-
-- Files 模块不是通用上传器 UI，它主要聚焦于 Agent 配置查看。
-- 当前项目中的 Studio 仅支持中文和英文。
-- 部分 Settings 管理功能仍是本地偏好 UI，等远程协议明确后再接入真实服务。
+```bash
+npm run test
+```

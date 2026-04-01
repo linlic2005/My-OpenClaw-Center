@@ -55,10 +55,14 @@ class SettingsService {
 
   async exportDiagnostics(state: SettingsState): Promise<void> {
     const [errorLogs] = await Promise.all([persistenceService.listErrorLogs(200)]);
+    const sanitizedSettings: SettingsState = {
+      ...state,
+      gatewayAuthToken: state.gatewayAuthToken ? "[redacted]" : ""
+    };
 
     downloadJson(`openclaw-diagnostics-${Date.now()}.json`, {
       exportedAt: new Date().toISOString(),
-      settings: state,
+      settings: sanitizedSettings,
       gateway: {
         url: gatewayService.getUrl(),
         status: gatewayService.getStatus(),

@@ -1,6 +1,14 @@
 import { createId } from "../lib/utils";
-import { getDefaultDeploymentMode, getPresetEndpoints } from "../config/runtime";
+import { getDefaultDeploymentMode, getPresetEndpoints, runtimeAppMeta } from "../config/runtime";
 import { persistenceService } from "./PersistenceService";
+import {
+  buildGatewayConnectDevice,
+  clearDeviceAuthToken,
+  loadDeviceAuthToken,
+  loadOrCreateDeviceIdentity,
+  storeDeviceAuthToken,
+  type StoredGatewayDeviceIdentity
+} from "./GatewayDeviceAuth";
 import type {
   AgentProfile,
   ConnectionStatus,
@@ -32,6 +40,60 @@ interface SendOptions {
   timeoutMs?: number;
 }
 
+interface GatewayEventFrame<TPayload = unknown> {
+  type: "event";
+  event: string;
+  payload: TPayload | undefined;
+  seq?: number;
+  ts?: number;
+}
+
+interface GatewayErrorEnvelope {
+  code?: string;
+  message?: string;
+  details?: unknown;
+}
+
+interface GatewayHelloPayload {
+  protocol?: number;
+  server?: {
+    version?: string;
+    connId?: string;
+  };
+  features?: {
+    methods?: string[];
+    events?: string[];
+    caps?: string[];
+  };
+  auth?: {
+    role?: string;
+    scopes?: string[];
+    deviceToken?: string;
+    issuedAtMs?: number;
+  };
+  snapshot?: {
+    activeConnections?: number;
+    uptimeMs?: number;
+  };
+  policy?: {
+    tickIntervalMs?: number;
+  };
+}
+
+interface ConnectChallengePayload {
+  nonce?: string;
+}
+
+interface ConnectPlan {
+  url: string;
+  params: Record<string, unknown>;
+  deviceIdentity: StoredGatewayDeviceIdentity | null;
+  storedDeviceToken?: string;
+  authToken?: string;
+  role: string;
+  scopes: string[];
+}
+
 export interface GatewayStateSnapshot {
   status: ConnectionStatus;
   reconnectAttempt: number;
@@ -40,33 +102,47 @@ export interface GatewayStateSnapshot {
 }
 
 export class GatewayRequestError extends Error {
-  code: number;
+  code: string | number;
   payload?: unknown;
+  details?: unknown;
 
-  constructor(code: number, message: string, payload?: unknown) {
+  constructor(code: string | number, message: string, payload?: unknown, details?: unknown) {
     super(message);
     this.name = "GatewayRequestError";
     this.code = code;
     this.payload = payload;
+    this.details = details;
   }
 }
 
 const DEFAULT_URL = getPresetEndpoints(getDefaultDeploymentMode()).gatewayUrl;
 const MAX_RECONNECT_ATTEMPTS = 10;
-const HEARTBEAT_INTERVAL_MS = 30_000;
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000;
+const CONNECT_QUEUE_DELAY_MS = 750;
+const CONNECT_TIMEOUT_MS = 15_000;
 const OFFLINE_QUEUE_KEY = "gateway.offlineQueue";
 const AUTH_TOKEN_KEY = "gateway.authToken";
 
+const GATEWAY_PROTOCOL_VERSION = 3;
+const GATEWAY_ROLE = "operator";
+const GATEWAY_CLIENT_ID = "openclaw-center";
+const GATEWAY_CLIENT_MODE = "webchat";
+const GATEWAY_CAPS = ["tool-events"];
+const GATEWAY_SCOPES = ["operator.read", "operator.write"];
+
+const RETRYABLE_DEVICE_TOKEN_ERRORS = new Set(["AUTH_DEVICE_TOKEN_MISMATCH", "device-token-invalid"]);
+const RETRYABLE_SHARED_TOKEN_ERRORS = new Set(["AUTH_TOKEN_MISMATCH"]);
+
 const iconMap: Record<string, string> = {
-  code: "💻",
-  coding: "💻",
-  search: "🔎",
-  research: "🔎",
-  write: "✍️",
-  writing: "✍️",
-  design: "🎨",
-  studio: "🧪",
-  robot: "🤖"
+  code: "C",
+  coding: "C",
+  search: "S",
+  research: "S",
+  write: "W",
+  writing: "W",
+  design: "D",
+  studio: "T",
+  robot: "R"
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -75,16 +151,57 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function normalizeAgentProfile(raw: unknown): AgentProfile {
   const record = isRecord(raw) ? raw : {};
-  const iconKey = String(record.icon ?? "robot").toLowerCase();
+  const iconKey = String(record.icon ?? record.kind ?? "robot").toLowerCase();
+  const installed = record.installed === undefined ? true : Boolean(record.installed);
+  const enabled = record.enabled === undefined ? true : Boolean(record.enabled);
 
   return {
     id: String(record.id ?? createId("agent")),
-    name: String(record.name ?? "Agent"),
-    description: String(record.description ?? ""),
-    icon: iconMap[iconKey] ?? String(record.icon ?? "🤖"),
-    enabled: record.enabled === undefined ? true : Boolean(record.enabled),
-    installed: record.installed === undefined ? true : Boolean(record.installed)
+    name: String(record.name ?? record.label ?? "Agent"),
+    description: String(record.description ?? record.summary ?? ""),
+    icon: iconMap[iconKey] ?? String(record.icon ?? record.kind ?? "R").slice(0, 1).toUpperCase(),
+    enabled,
+    installed
   };
+}
+
+function getLocale(): string {
+  return navigator.language || "en-US";
+}
+
+function getUserAgent(): string {
+  return navigator.userAgent || "OpenClaw Center";
+}
+
+function normalizeErrorCode(code: unknown): string | number {
+  if (typeof code === "number") return code;
+  if (typeof code === "string" && code.trim()) return code.trim();
+  return "gateway_error";
+}
+
+function toGatewayResponseError(response: GatewayResponse): GatewayRequestError {
+  const payload = response.payload;
+  const code = normalizeErrorCode(response.error?.code);
+  const message = response.error?.message?.trim() || "Gateway request failed";
+
+  return new GatewayRequestError(code, message, payload, response.error?.details);
+}
+
+function parseGatewayFrame(raw: unknown): GatewayResponse | GatewayEventFrame | null {
+  const parsed = JSON.parse(String(raw)) as GatewayResponse | GatewayEventFrame;
+  if (!isRecord(parsed) || typeof parsed.type !== "string") {
+    return null;
+  }
+
+  if (parsed.type === "res") {
+    return parsed as GatewayResponse;
+  }
+
+  if (parsed.type === "event" && typeof (parsed as GatewayEventFrame).event === "string") {
+    return parsed as GatewayEventFrame;
+  }
+
+  return null;
 }
 
 export class GatewayService {
@@ -94,6 +211,7 @@ export class GatewayService {
   private reconnectAttempt = 0;
   private heartbeatTimer: number | null = null;
   private reconnectTimer: number | null = null;
+  private heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
   private manualDisconnect = false;
   private connectPromise: Promise<void> | null = null;
   private statusListeners = new Set<StatusHandler>();
@@ -104,6 +222,7 @@ export class GatewayService {
   private agentsCache: AgentProfile[] = [];
   private persistenceHydrated = false;
   private authToken: string | null = null;
+  private lastHello: GatewayHelloPayload | null = null;
 
   setUrl(url: string): void {
     const nextUrl = url.trim();
@@ -178,8 +297,27 @@ export class GatewayService {
 
     this.connectPromise = new Promise<void>((resolve, reject) => {
       let settled = false;
+      let connectNonce: string | null = null;
+      let connectQueuedTimer: number | null = null;
+      let connectInFlight = false;
+      let retryWithStoredDeviceToken = false;
+      let suppressReconnectOnClose = false;
       const socket = new WebSocket(this.url);
       this.socket = socket;
+
+      const clearConnectTimer = () => {
+        if (connectQueuedTimer !== null) {
+          window.clearTimeout(connectQueuedTimer);
+          connectQueuedTimer = null;
+        }
+      };
+
+      const resolveOnce = () => {
+        if (settled) return;
+        settled = true;
+        this.connectPromise = null;
+        resolve();
+      };
 
       const rejectOnce = (reason: unknown) => {
         if (settled) return;
@@ -188,23 +326,101 @@ export class GatewayService {
         reject(reason);
       };
 
+      const queueConnect = () => {
+        clearConnectTimer();
+        connectQueuedTimer = window.setTimeout(() => {
+          void sendConnect();
+        }, CONNECT_QUEUE_DELAY_MS);
+      };
+
+      const sendConnect = async () => {
+        if (connectInFlight || socket.readyState !== WebSocket.OPEN) {
+          return;
+        }
+
+        connectInFlight = true;
+        clearConnectTimer();
+        let plan: ConnectPlan | null = null;
+
+        try {
+          plan = await this.buildConnectPlan(this.url, connectNonce, retryWithStoredDeviceToken);
+          const hello = await this.dispatchRequest<GatewayHelloPayload>(
+            "connect",
+            plan.params,
+            CONNECT_TIMEOUT_MS,
+            socket
+          );
+
+          this.lastHello = hello;
+          this.heartbeatIntervalMs = this.resolveHeartbeatInterval(hello);
+          this.reconnectAttempt = 0;
+          this.socket = socket;
+          this.emitState("connected");
+
+          if (plan.deviceIdentity && hello.auth?.deviceToken) {
+            await storeDeviceAuthToken({
+              url: this.url,
+              deviceId: plan.deviceIdentity.deviceId,
+              role: hello.auth.role ?? plan.role,
+              token: hello.auth.deviceToken,
+              scopes: hello.auth.scopes ?? plan.scopes
+            });
+          }
+
+          this.startHeartbeat();
+          void this.flushOfflineQueue();
+          resolveOnce();
+        } catch (error) {
+          connectInFlight = false;
+          const handled = await this.handleConnectFailure(error, plan, retryWithStoredDeviceToken);
+
+          if (handled === "retry-without-device-token") {
+            retryWithStoredDeviceToken = false;
+            queueConnect();
+            return;
+          }
+
+          if (handled === "retry-with-device-token") {
+            retryWithStoredDeviceToken = true;
+            queueConnect();
+            return;
+          }
+
+          suppressReconnectOnClose = true;
+          socket.close(4008, "connect_failed");
+          rejectOnce(error);
+        }
+      };
+
       socket.onopen = () => {
-        settled = true;
-        this.connectPromise = null;
-        this.reconnectAttempt = 0;
-        this.socket = socket;
-        this.emitState("connected");
-        this.startHeartbeat();
-        void this.flushOfflineQueue();
-        resolve();
+        queueConnect();
       };
 
       socket.onmessage = (event) => {
-        this.handleIncomingFrame(event.data);
+        try {
+          const frame = parseGatewayFrame(event.data);
+          if (!frame) {
+            return;
+          }
+
+          if (frame.type === "event" && frame.event === "connect.challenge") {
+            const payload = isRecord(frame.payload) ? (frame.payload as ConnectChallengePayload) : {};
+            connectNonce = typeof payload.nonce === "string" ? payload.nonce : null;
+            if (!connectInFlight) {
+              void sendConnect();
+            }
+            return;
+          }
+
+          this.routeFrame(frame);
+        } catch (error) {
+          console.error("Failed to parse gateway message", error);
+          void persistenceService.logError("gateway", error, { phase: "connect.onmessage" });
+        }
       };
 
       socket.onerror = () => {
-        if (!settled) {
+        if (!settled && socket.readyState !== WebSocket.OPEN) {
           rejectOnce(new Error(`Unable to connect to ${this.url}`));
         }
       };
@@ -213,10 +429,19 @@ export class GatewayService {
         if (this.socket === socket) {
           this.socket = null;
         }
+
+        clearConnectTimer();
         this.stopHeartbeat();
+
         if (!settled) {
           rejectOnce(new Error(`Unable to connect to ${this.url}`));
         }
+
+        if (suppressReconnectOnClose) {
+          this.emitState("disconnected");
+          return;
+        }
+
         this.handleSocketClose();
       };
     });
@@ -251,7 +476,7 @@ export class GatewayService {
         persistenceService.getJson<string | null>(AUTH_TOKEN_KEY, null)
       ]);
 
-      this.authToken = storedToken;
+      this.authToken = storedToken?.trim() || null;
       this.offlineQueue = storedQueue.map((item) => ({
         ...item,
         retries: Number(item.retries ?? 0),
@@ -268,8 +493,9 @@ export class GatewayService {
   }
 
   async setAuthToken(token: string | null): Promise<void> {
-    this.authToken = token;
-    await persistenceService.setJson(AUTH_TOKEN_KEY, token);
+    const normalized = token?.trim() || null;
+    this.authToken = normalized;
+    await persistenceService.setJson(AUTH_TOKEN_KEY, normalized);
   }
 
   async clearOfflineQueue(): Promise<void> {
@@ -319,117 +545,184 @@ export class GatewayService {
       });
     }
 
-    return this.dispatchRequest<TPayload>(requestId, type, payload, timeoutMs);
+    return this.dispatchRequest<TPayload>(type, payload, timeoutMs);
   }
 
   async ping(): Promise<GatewayHealth> {
     const startedAt = performance.now();
-    await this.send("gateway.ping", {}, { queueIfOffline: false, timeoutMs: 10_000 });
-    const status = await this.send<Record<string, unknown>>(
-      "gateway.get_status",
-      {},
-      { queueIfOffline: false, timeoutMs: 10_000 }
-    );
 
-    return {
-      version: String(status.version ?? "unknown"),
-      uptime: Number(status.uptime ?? 0),
-      activeConnections: Number(status.activeConnections ?? 0),
-      latency: Math.round(performance.now() - startedAt)
-    };
+    try {
+      const payload = await this.send<Record<string, unknown>>("health", {}, { queueIfOffline: false, timeoutMs: 10_000 });
+      return {
+        version: String(payload.version ?? this.lastHello?.server?.version ?? "unknown"),
+        uptime: Number(payload.uptimeMs ?? this.lastHello?.snapshot?.uptimeMs ?? 0),
+        activeConnections: Number(
+          payload.activeConnections ?? this.lastHello?.snapshot?.activeConnections ?? 0
+        ),
+        latency: Math.round(performance.now() - startedAt)
+      };
+    } catch {
+      return this.helloToHealth(this.lastHello, Math.round(performance.now() - startedAt));
+    }
   }
 
   async probe(url = this.url): Promise<GatewayHealth> {
+    await this.hydratePersistence();
+
     return new Promise<GatewayHealth>((resolve, reject) => {
-      const requestId = createId("probe");
-      const startedAt = performance.now();
       const socket = new WebSocket(url);
+      let connectNonce: string | null = null;
+      let connectTimer: number | null = null;
+      let connectInFlight = false;
+      let retryWithStoredDeviceToken = false;
+      const startedAt = performance.now();
 
-      const timeout = window.setTimeout(() => {
+      const clearTimer = () => {
+        if (connectTimer !== null) {
+          window.clearTimeout(connectTimer);
+          connectTimer = null;
+        }
+      };
+
+      const fail = (error: unknown) => {
+        clearTimer();
         socket.close();
-        reject(new Error(`Connection probe timed out for ${url}`));
-      }, 8_000);
-
-      socket.onopen = () => {
-        const request: GatewayRequest = {
-          type: "gateway.get_status",
-          id: requestId,
-          timestamp: Date.now(),
-          payload: {}
-        };
-        socket.send(JSON.stringify(request));
+        reject(error);
       };
 
-      socket.onerror = () => {
-        window.clearTimeout(timeout);
-        reject(new Error(`Unable to connect to ${url}`));
+      const queueConnect = () => {
+        clearTimer();
+        connectTimer = window.setTimeout(() => {
+          void sendConnect();
+        }, CONNECT_QUEUE_DELAY_MS);
       };
 
-      socket.onmessage = (event) => {
-        window.clearTimeout(timeout);
+      const sendConnect = async () => {
+        if (connectInFlight || socket.readyState !== WebSocket.OPEN) return;
+        connectInFlight = true;
+
+        let plan: ConnectPlan | null = null;
         try {
-          const response = JSON.parse(String(event.data)) as GatewayResponse<Record<string, unknown>>;
-          if (response.code !== 0) {
-            reject(new GatewayRequestError(response.code, response.message ?? "Probe failed", response.payload));
+          plan = await this.buildConnectPlan(url, connectNonce, retryWithStoredDeviceToken);
+          const hello = await this.dispatchRequest<GatewayHelloPayload>(
+            "connect",
+            plan.params,
+            CONNECT_TIMEOUT_MS,
+            socket
+          );
+
+          if (plan.deviceIdentity && hello.auth?.deviceToken) {
+            await storeDeviceAuthToken({
+              url,
+              deviceId: plan.deviceIdentity.deviceId,
+              role: hello.auth.role ?? plan.role,
+              token: hello.auth.deviceToken,
+              scopes: hello.auth.scopes ?? plan.scopes
+            });
+          }
+
+          clearTimer();
+          socket.close();
+          resolve(this.helloToHealth(hello, Math.round(performance.now() - startedAt)));
+        } catch (error) {
+          connectInFlight = false;
+          const handled = await this.handleConnectFailure(error, plan, retryWithStoredDeviceToken);
+
+          if (handled === "retry-without-device-token") {
+            retryWithStoredDeviceToken = false;
+            queueConnect();
             return;
           }
 
-          resolve({
-            version: String(response.payload?.version ?? "unknown"),
-            uptime: Number(response.payload?.uptime ?? 0),
-            activeConnections: Number(response.payload?.activeConnections ?? 0),
-            latency: Math.round(performance.now() - startedAt)
-          });
-        } catch (error) {
-          reject(error);
-        } finally {
-          socket.close();
+          if (handled === "retry-with-device-token") {
+            retryWithStoredDeviceToken = true;
+            queueConnect();
+            return;
+          }
+
+          fail(error);
         }
+      };
+
+      socket.onopen = () => {
+        queueConnect();
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const frame = parseGatewayFrame(event.data);
+          if (!frame) return;
+
+          if (frame.type === "event" && frame.event === "connect.challenge") {
+            const payload = isRecord(frame.payload) ? (frame.payload as ConnectChallengePayload) : {};
+            connectNonce = typeof payload.nonce === "string" ? payload.nonce : null;
+            if (!connectInFlight) {
+              void sendConnect();
+            }
+            return;
+          }
+
+          this.routeFrame(frame);
+        } catch (error) {
+          fail(error);
+        }
+      };
+
+      socket.onerror = () => {
+        fail(new Error(`Unable to connect to ${url}`));
+      };
+
+      socket.onclose = () => {
+        clearTimer();
       };
     });
   }
 
   async getAgents(): Promise<AgentProfile[]> {
-    const payload = await this.send<{ agents?: unknown[] }>(
-      "gateway.get_agents",
+    const payload = await this.send<{ agents?: unknown[] } | unknown[]>(
+      "agents.list",
       {},
       { queueIfOffline: false, timeoutMs: 15_000 }
     );
 
-    this.agentsCache = Array.isArray(payload.agents)
-      ? payload.agents.map(normalizeAgentProfile)
-      : [];
+    const rawAgents = Array.isArray(payload)
+      ? payload
+      : Array.isArray((payload as { agents?: unknown[] })?.agents)
+        ? (payload as { agents?: unknown[] }).agents ?? []
+        : [];
 
+    this.agentsCache = rawAgents.map(normalizeAgentProfile);
     return [...this.agentsCache];
   }
 
   private async dispatchRequest<TPayload>(
-    requestId: string,
-    type: string,
-    payload: Record<string, unknown>,
-    timeoutMs: number
+    method: string,
+    params: Record<string, unknown>,
+    timeoutMs: number,
+    socket = this.socket
   ): Promise<TPayload> {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
       throw new Error("Gateway is offline");
     }
 
+    const requestId = createId("req");
     const request: GatewayRequest = {
-      type,
+      type: "req",
       id: requestId,
-      timestamp: Date.now(),
-      payload
+      method,
+      params
     };
 
     return new Promise<TPayload>((resolve, reject) => {
       const timeout = window.setTimeout(() => {
         this.pendingRequests.delete(requestId);
-        reject(new Error(`Request timed out: ${type}`));
+        reject(new Error(`Request timed out: ${method}`));
       }, timeoutMs);
 
       this.pendingRequests.set(requestId, { resolve, reject, timeout });
 
       try {
-        this.socket?.send(JSON.stringify(request));
+        socket.send(JSON.stringify(request));
       } catch (error) {
         window.clearTimeout(timeout);
         this.pendingRequests.delete(requestId);
@@ -438,50 +731,163 @@ export class GatewayService {
     });
   }
 
-  private handleIncomingFrame(raw: unknown): void {
-    try {
-      const data = JSON.parse(String(raw)) as GatewayResponse | GatewayPushEvent;
-      const requestId =
-        (isRecord(data) ? String(data.requestId ?? data.id ?? "") : "") || "";
+  private routeFrame(frame: GatewayResponse | GatewayEventFrame): void {
+    if (frame.type === "res") {
+      const pending = this.pendingRequests.get(frame.id);
+      if (!pending) return;
 
-      if (requestId && this.pendingRequests.has(requestId)) {
-        const pending = this.pendingRequests.get(requestId);
-        if (!pending) return;
+      window.clearTimeout(pending.timeout);
+      this.pendingRequests.delete(frame.id);
 
-        window.clearTimeout(pending.timeout);
-        this.pendingRequests.delete(requestId);
-
-        const response = data as GatewayResponse;
-        if (response.code === 0) {
-          pending.resolve(response.payload);
-        } else {
-          pending.reject(
-            new GatewayRequestError(
-              Number(response.code ?? 1),
-              response.message ?? "Gateway request failed",
-              response.payload
-            )
-          );
-          if (Number(response.code ?? 1) === 401) {
-            void this.setAuthToken(null);
-          }
-        }
+      if (frame.ok) {
+        pending.resolve(frame.payload);
         return;
       }
 
-      const pushEvent = data as GatewayPushEvent;
-      if (pushEvent.type === "gateway.disconnected") {
-        this.handleSocketClose();
-      }
+      const error = toGatewayResponseError(frame);
+      pending.reject(error);
 
-      const handlers = this.pushHandlers.get(pushEvent.type);
-      if (handlers) {
-        handlers.forEach((handler) => handler(pushEvent));
+      if (String(error.code) === "AUTH_TOKEN_MISMATCH") {
+        void this.setAuthToken(this.authToken);
       }
-    } catch (error) {
-      console.error("Failed to parse gateway message", error);
-      void persistenceService.logError("gateway", error, { phase: "handleIncomingFrame" });
+      return;
     }
+
+    const handlers = this.pushHandlers.get(frame.event);
+    if (handlers) {
+      handlers.forEach((handler) => handler(frame as GatewayPushEvent));
+    }
+  }
+
+  private async buildConnectPlan(
+    url: string,
+    connectNonce: string | null,
+    retryWithStoredDeviceToken: boolean
+  ): Promise<ConnectPlan> {
+    const deviceIdentity = await loadOrCreateDeviceIdentity();
+    const storedDeviceToken = deviceIdentity
+      ? await loadDeviceAuthToken({
+          url,
+          deviceId: deviceIdentity.deviceId,
+          role: GATEWAY_ROLE
+        })
+      : undefined;
+    const explicitAuthToken = this.authToken?.trim() || undefined;
+    const fallbackToken = storedDeviceToken?.token;
+
+    let authToken = explicitAuthToken;
+    let deviceToken: string | undefined;
+
+    if (retryWithStoredDeviceToken && fallbackToken) {
+      authToken = fallbackToken;
+      deviceToken = undefined;
+    } else if (!authToken && fallbackToken) {
+      authToken = fallbackToken;
+      deviceToken = undefined;
+    } else if (authToken && fallbackToken) {
+      deviceToken = fallbackToken;
+    }
+
+    const device = await buildGatewayConnectDevice({
+      deviceIdentity,
+      clientId: GATEWAY_CLIENT_ID,
+      clientMode: GATEWAY_CLIENT_MODE,
+      role: GATEWAY_ROLE,
+      scopes: GATEWAY_SCOPES,
+      authToken,
+      connectNonce
+    });
+
+    const params: Record<string, unknown> = {
+      minProtocol: GATEWAY_PROTOCOL_VERSION,
+      maxProtocol: GATEWAY_PROTOCOL_VERSION,
+      role: GATEWAY_ROLE,
+      scopes: GATEWAY_SCOPES,
+      client: {
+        id: GATEWAY_CLIENT_ID,
+        mode: GATEWAY_CLIENT_MODE,
+        version: runtimeAppMeta.version,
+        userAgent: getUserAgent(),
+        locale: getLocale()
+      },
+      caps: GATEWAY_CAPS
+    };
+
+    if (device) {
+      params.device = {
+        id: device.id,
+        publicKey: device.publicKey,
+        signature: device.signature,
+        signedAtMs: device.signedAt,
+        nonce: device.nonce
+      };
+    }
+
+    if (authToken || deviceToken) {
+      params.auth = {
+        ...(authToken ? { token: authToken } : {}),
+        ...(deviceToken ? { deviceToken } : {})
+      };
+    }
+
+    return {
+      url,
+      params,
+      deviceIdentity,
+      storedDeviceToken: fallbackToken,
+      authToken,
+      role: GATEWAY_ROLE,
+      scopes: GATEWAY_SCOPES
+    };
+  }
+
+  private async handleConnectFailure(
+    error: unknown,
+    plan: ConnectPlan | null,
+    retryWithStoredDeviceToken: boolean
+  ): Promise<"retry-without-device-token" | "retry-with-device-token" | "fail"> {
+    if (!(error instanceof GatewayRequestError) || !plan?.deviceIdentity) {
+      return "fail";
+    }
+
+    const code = String(error.code);
+
+    if (plan.storedDeviceToken && RETRYABLE_DEVICE_TOKEN_ERRORS.has(code)) {
+      await clearDeviceAuthToken({
+        url: plan.url,
+        deviceId: plan.deviceIdentity.deviceId,
+        role: plan.role
+      });
+      return "retry-without-device-token";
+    }
+
+    if (
+      plan.storedDeviceToken &&
+      this.authToken &&
+      !retryWithStoredDeviceToken &&
+      RETRYABLE_SHARED_TOKEN_ERRORS.has(code)
+    ) {
+      return "retry-with-device-token";
+    }
+
+    return "fail";
+  }
+
+  private helloToHealth(hello: GatewayHelloPayload | null, latency: number): GatewayHealth {
+    return {
+      version: String(hello?.server?.version ?? "unknown"),
+      uptime: Number(hello?.snapshot?.uptimeMs ?? 0),
+      activeConnections: Number(hello?.snapshot?.activeConnections ?? 0),
+      latency
+    };
+  }
+
+  private resolveHeartbeatInterval(hello: GatewayHelloPayload | null): number {
+    const configured = Number(hello?.policy?.tickIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS);
+    if (!Number.isFinite(configured) || configured <= 1_000) {
+      return DEFAULT_HEARTBEAT_INTERVAL_MS;
+    }
+    return Math.min(Math.max(configured, 5_000), 60_000);
   }
 
   private handleSocketClose(): void {
@@ -518,10 +924,10 @@ export class GatewayService {
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.heartbeatTimer = window.setInterval(() => {
-      void this.send("gateway.ping", {}, { queueIfOffline: false, timeoutMs: 8_000 }).catch(() => {
+      void this.send("health", {}, { queueIfOffline: false, timeoutMs: 8_000 }).catch(() => {
         this.handleSocketClose();
       });
-    }, HEARTBEAT_INTERVAL_MS);
+    }, this.heartbeatIntervalMs);
   }
 
   private stopHeartbeat(): void {
@@ -555,7 +961,7 @@ export class GatewayService {
       this.emitState(this.status);
 
       try {
-        const payload = await this.dispatchRequest(item.id, item.type, item.payload, item.timeoutMs);
+        const payload = await this.dispatchRequest(item.type, item.payload, item.timeoutMs);
         item.resolve(payload);
       } catch (error) {
         item.retries += 1;

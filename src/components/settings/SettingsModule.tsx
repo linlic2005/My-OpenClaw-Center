@@ -210,6 +210,27 @@ export function SettingsModule() {
           </label>
 
           <label className="field settings-field">
+            <span className="settings-label">{t({ "zh-CN": "Gateway Token", "en-US": "Gateway Token" })}</span>
+            <input
+              className="text-input settings-input"
+              type="password"
+              autoComplete="off"
+              value={settings.gatewayAuthToken}
+              onChange={(event) => update("gatewayAuthToken", event.target.value)}
+              placeholder={t({
+                "zh-CN": "棣栨杩炴帴鏃惰緭鍏ワ紝鍚庣画浼氬鐢ㄥ凡閰嶅鐨勮澶?",
+                "en-US": "Used for the first connect. Later reconnects can reuse the paired device."
+              })}
+            />
+            <div className="list-meta">
+              {t({
+                "zh-CN": "Token 浠呭瓨鍦ㄦ湰鏈哄苟鐢ㄤ簬 connect.auth.token锛岃瘖鏂鍑轰細鑷姩鑴辨晱銆?",
+                "en-US": "Stored locally and sent as `connect.auth.token`. Diagnostic exports redact it automatically."
+              })}
+            </div>
+          </label>
+
+          <label className="field settings-field">
             <span className="settings-label">{t({ "zh-CN": "Studio 地址", "en-US": "Studio URL" })}</span>
             <input
               className="text-input settings-input"

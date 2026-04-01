@@ -31,11 +31,12 @@ The project now keeps both modes at the same time through environment presets an
 
 ### Reliability features
 
-- Real WebSocket Gateway connection
+- Official OpenClaw Gateway handshake (`connect.challenge` + `connect`)
 - Heartbeat and reconnect
 - Offline queue persistence
 - Error log persistence
 - Settings and chat draft persistence
+- Paired-device token persistence for reconnects
 - Tauri SQL fallback to localStorage
 
 ## Current behavior by module
@@ -46,7 +47,7 @@ The project now keeps both modes at the same time through environment presets an
 - Kanban
 - File listing and file export/download for config viewing
 - Gateway connection health
-- Agent list loading from `gateway.get_agents`
+- Agent list loading from `agents.list`
 
 ### Local preference UI for now
 
@@ -85,6 +86,10 @@ VITE_APP_NAME=OpenClaw Center
 VITE_APP_VERSION=1.0.0
 ```
 
+Enter the Gateway onboarding token in Settings on the first remote connection.
+The app stores that token locally, uses it as `connect.auth.token`, and redacts it from exported diagnostics.
+After the first successful pairing, the app also persists the Gateway-issued paired-device token and can reuse it on later reconnects.
+
 ### Recommended values
 
 #### Pure local deployment
@@ -119,19 +124,83 @@ If you use TLS in production, prefer `wss://` for Gateway and `https://` for Stu
 
 1. Deploy OpenClaw Gateway on Linux and expose its WebSocket port.
 2. Deploy Studio on Linux if you want iframe Workspace support.
-3. Ensure the Windows machine can reach the Linux server.
-4. Open firewall and security-group rules for the required ports.
-5. Set `.env` remote URLs to the Linux host.
-6. Build and run the desktop app on Windows.
-7. In Settings, switch `Deployment Mode` to `Remote`, or use `Custom` if you want different addresses.
+3. Prefer HTTPS for the UI and `wss://` for Gateway when the client is not on localhost.
+4. Ensure the Windows machine can reach the Linux server.
+5. Open firewall and security-group rules for the required ports.
+6. Set `.env` remote URLs to the Linux host or reverse-proxy path.
+7. Build and run the app.
+8. In Settings, switch `Deployment Mode` to `Remote`, or use `Custom` if you want different addresses.
+9. Enter the Gateway onboarding token in `Gateway Token` for the first connection.
+10. If your Gateway requires manual device approval, approve the new operator device on the server and retry once.
+
+### Option 2A: Windows desktop + Linux server through SSH tunnel
+
+Use this when Gateway or Studio only listens on `127.0.0.1` on the Linux server and cannot be rebound to `0.0.0.0`.
+
+1. Open PowerShell on Windows.
+2. Create an SSH local forward to the Linux server:
+
+```powershell
+ssh -N -L 18789:127.0.0.1:18789 -L 19000:127.0.0.1:19000 your-user@YOUR_LINUX_HOST
+```
+
+3. Keep that terminal window open while using the app.
+4. In OpenClaw Center, switch to `Custom` deployment mode.
+5. Set:
+
+```text
+Gateway URL: ws://127.0.0.1:18789
+Studio URL:  http://127.0.0.1:19000
+```
+
+6. Test the Gateway connection again from Settings.
+
+Notes:
+
+- If you only need Gateway, you can remove the `-L 19000:127.0.0.1:19000` part.
+- If your Linux host exposes SSH on a non-default port, use `ssh -p <port>`.
+- This is often the safest approach when the server-side services are intentionally bound to localhost only.
 
 ### Linux server checklist
 
 - Gateway must expose the WebSocket endpoint used by the client
+- Remote browser clients should use HTTPS/WSS so WebCrypto device signing is available in a secure context
 - Studio must expose `/health` and its main page if you want iframe Workspace support
 - If Studio is on another origin, it must allow being embedded in an iframe
 - Reverse proxy, CSP, and `X-Frame-Options` must not block embedding
 - If using HTTPS, make sure certificates are valid on the Windows client
+
+## Gateway authentication notes
+
+- OpenClaw Gateway does not accept the old "open WebSocket and immediately call `gateway.get_status`" flow.
+- The client now follows the official handshake: receive `connect.challenge`, send `req/connect`, then persist the paired-device token returned by `hello-ok`.
+- `Gateway Token` in Settings is for first connect and token-protected servers. Leave it empty only after the device has already been paired or when the server explicitly allows insecure auth for local development.
+- If the server reports a stale paired-device token, the client clears the cached device token and retries with the shared Gateway token automatically.
+
+## Deploy with OpenClaw
+
+If you want OpenClaw to take over the deployment workflow, use the root-level [SKILL.md](./SKILL.md). It is written to guide an OpenClaw agent through the full Linux rollout, including frontend build, production endpoint setup, Nginx reverse proxy, Studio service preparation, and verification from a Windows browser.
+
+Recommended prompt:
+
+```text
+Use the deployment skill at ./SKILL.md and complete the Linux deployment for this repository end to end.
+
+Goal:
+- Deploy the OpenClaw Center UI on my Linux server
+- Keep OpenClaw Gateway and Studio on the same Linux server
+- Make the UI operable from my Windows browser
+
+Requirements:
+- Prefer same-origin deployment through Nginx
+- Build the frontend for remote mode
+- Configure Gateway as /gateway/ and Studio as /studio
+- Prepare or update all needed files in this repo
+- If server access is unavailable, finish all repo-side work and leave exact server commands and config paths
+- At the end, give me a verification checklist and the remaining manual steps
+```
+
+If you already know your domain, server path, or service user, append them to the same prompt so OpenClaw can fill in the final production values directly.
 
 ## Local development
 
@@ -163,6 +232,12 @@ npm run tauri dev
 
 ```bash
 npm run build
+```
+
+### Test
+
+```bash
+npm run test
 ```
 
 ## How to use each module

@@ -138,6 +138,7 @@ export interface SettingsState {
   language: "zh-CN" | "en-US";
   deploymentMode: DeploymentMode;
   gatewayUrl: string;
+  gatewayAuthToken: string;
   studioUrl: string;
   proxyMode: "none" | "http" | "socks";
   theme: "light" | "dark" | "system";
@@ -174,27 +175,31 @@ export interface GatewayHealth {
   latency: number;
 }
 
-export interface GatewayRequest<TPayload = Record<string, unknown>> {
-  type: string;
+export interface GatewayRequest<TPayload = unknown> {
+  type: "req";
   id: string;
-  timestamp: number;
-  payload?: TPayload;
+  method: string;
+  params?: TPayload;
 }
 
 export interface GatewayResponse<TPayload = unknown> {
-  type?: string;
-  id?: string;
-  requestId?: string;
-  code: number;
-  message?: string;
+  type: "res";
+  id: string;
+  ok: boolean;
   payload?: TPayload;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
 }
 
 export interface GatewayPushEvent<TPayload = unknown> {
-  type: string;
-  id: string;
-  timestamp: number;
-  payload: TPayload;
+  type: "event";
+  event: string;
+  payload: TPayload | undefined;
+  seq?: number;
+  ts?: number;
 }
 
 export interface QueuedRequest {

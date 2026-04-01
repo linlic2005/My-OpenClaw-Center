@@ -262,6 +262,7 @@ export const defaultSettings: SettingsState = {
   language: "zh-CN",
   deploymentMode: defaultDeploymentMode,
   gatewayUrl: defaultEndpoints.gatewayUrl,
+  gatewayAuthToken: "",
   studioUrl: defaultEndpoints.studioUrl,
   proxyMode: "none",
   theme: "system",
