@@ -1,179 +1,258 @@
 ---
-name: openclaw-center-linux-deploy
-description: Deploy OpenClaw Center to a Linux server end to end, including front-end build, production environment variables, Nginx reverse proxy, Studio service, and connectivity verification from a Windows browser. Use when the task mentions deployment, Linux server rollout, remote Gateway or Studio access, Nginx, systemd, public URL setup, or making the UI operable from Windows against Linux-hosted services.
+name: openclaw-center-linux-public-deploy
+description: 将 OpenClaw Center 部署到同一台 Linux 服务器，并与该服务器上的 OpenClaw Gateway 配合工作，让 Windows 用户能够通过公网浏览器打开页面和使用系统。适用于用户明确提到 Linux 服务器、公网访问、同机部署 Gateway、Nginx、HTTPS/WSS、systemd，或要求区分自动步骤与手动步骤时。
 ---
 
-# OpenClaw Center Linux Deploy
+# OpenClaw Center Linux 公网部署技能
 
-Use this skill to carry the deployment from repository state to a working Linux-hosted environment that can be opened and operated from a Windows browser.
+本技能是写给 OpenClaw agent 的部署说明。
 
-## Outcome
+目标场景已经固定，不要擅自切换到别的部署方案：
 
-Finish with all of the following unless the user explicitly narrows scope:
+- OpenClaw Center 部署在用户的 Linux 服务器上
+- OpenClaw Gateway 也部署在这同一台 Linux 服务器上
+- Windows 用户通过公网浏览器访问页面
+- 页面必须能正常连接同机部署的 Gateway
 
-- Front-end built for remote mode
-- `Gateway URL` and `Studio URL` set to reachable Linux endpoints
-- A secure context for remote Gateway auth (`https://` UI and `wss://` Gateway unless using localhost/SSH tunnel)
-- First-connect Gateway onboarding token flow documented for operators
-- Studio prepared to run as a service
-- Nginx configured to serve the UI and reverse proxy Gateway and Studio
-- A validation checklist with concrete test commands
+如果没有特殊说明，默认按“浏览器公网访问 + 同机 Gateway + 同域反向代理”方案实施。
 
-## Default architecture
+## 一、最终目标
 
-Prefer the same-origin production layout unless the user asks otherwise:
+除非用户明确缩小范围，否则尽量交付以下结果：
 
-- UI: `https://<domain>/`
-- Gateway: `wss://<domain>/gateway/`
-- Studio: `https://<domain>/studio`
+- 前端完成生产构建
+- UI 可由公网浏览器访问
+- Gateway 与 UI 通过同域反向代理连通
+- Windows 端可直接打开页面并完成 Gateway 连接
+- Studio 如有启用，也通过同域方式接入
+- 产出完整的部署说明、验证步骤和问题边界说明
 
-Prefer this because it reduces browser mixed-content issues, avoids cross-origin iframe problems, and is easier to explain and validate.
-It also keeps the browser in a secure context so OpenClaw's official device-signing handshake can work remotely.
+## 二、固定部署方式
 
-## Files to use first
+优先使用以下结构，不要随意改成直连端口暴露：
 
-Read these project files before making deployment edits:
+- UI: `https://<你的域名>/`
+- Gateway: `wss://<你的域名>/gateway/`
+- Studio: `https://<你的域名>/studio`
+
+原因：
+
+- Windows 公网浏览器访问时，更容易满足安全上下文要求
+- 当前 Gateway 官方连接方式依赖设备签名与正式握手，远程环境优先使用 HTTPS/WSS
+- 可避免浏览器 mixed-content 问题
+- 可减少跨域 iframe 与跨域认证问题
+
+## 三、必须遵守的连接前提
+
+OpenClaw agent 在处理部署时，必须把以下前提写清楚并按此实现：
+
+1. 不要使用旧的“连接 WebSocket 后直接调用 `gateway.get_status`”方案。
+2. 当前客户端使用的是官方 Gateway 连接流程：
+   - 接收 `connect.challenge`
+   - 发送 `req/connect`
+   - 首连使用 `Gateway Token`
+   - 成功后缓存 paired-device token
+3. 远程公网访问时，默认需要：
+   - 页面使用 `https://`
+   - Gateway 使用 `wss://`
+4. 如果用户只给了 IP 没给域名，也要明确告诉用户：
+   - 可以临时调试
+   - 但正式公网环境更推荐域名 + HTTPS 证书
+
+## 四、部署时优先使用的仓库文件
+
+在开始部署前，优先读取并复用以下文件：
 
 - `README.md`
 - `README.zh-CN.md`
+- `项目说明文档.md`
 - `deploy/linux/README.zh-CN.md`
-- `deploy/linux/.env.production.example`
 - `deploy/linux/nginx/openclaw-center.conf`
 - `deploy/linux/systemd/openclaw-studio.service`
 - `deploy/linux/systemd/openclaw-studio.env.example`
 - `studio/requirements-prod.txt`
 - `studio/wsgi.py`
 
-## Working rules
+## 五、执行原则
 
-- Prefer making the deployment reproducible through repo files instead of giving only ad hoc shell snippets.
-- Prefer same-origin reverse proxy over exposing raw `18789` and `19000` publicly.
-- Treat official Gateway auth as mandatory: the client must receive `connect.challenge`, answer with `req/connect`, and keep paired-device auth working across reconnects.
-- If exact server values are missing, use placeholders like `YOUR_DOMAIN` and clearly mark them.
-- If you cannot reach the target server from the current environment, still complete all repo-side preparation and leave a precise server-side runbook.
-- Do not assume Tauri is required for deployment. This project can run as a browser-based UI.
-- When updating deployment instructions in `README.md`, sync the corresponding Chinese guidance in `README.zh-CN.md` in the same change.
+- 优先修改仓库内配置文件，而不是只给零散命令
+- 优先使用 Nginx 同域反向代理，不要默认公开暴露 Gateway 原始端口
+- 如果用户没有提供完整生产信息，先用清晰占位符补齐模板
+- 如果当前环境无法登录用户服务器，也要完成仓库侧所有准备，并给出精确的手动执行说明
+- 必须明确标出“自动完成项”和“需要用户手动处理项”
+- 如果某一步因为权限、证书、DNS、云防火墙、服务器访问权限制而无法完成，不能模糊带过，必须单独列出来
 
-## Execution flow
+## 六、标准执行流程
 
-### 1. Confirm deployment shape
+### 1. 先确认公网访问入口
 
-Determine whether the target is:
+确认或假设以下信息：
 
-- Browser-based deployment on Linux
-- Windows desktop app talking to Linux services
-- Temporary SSH tunnel workflow
+- 公网域名，或临时公网 IP
+- Nginx 站点根路径
+- UI 最终访问地址
+- Gateway 是否通过 `/gateway/` 反代
+- Studio 是否通过 `/studio` 反代
 
-If the user says they want to open the UI from Windows and operate it, prefer browser-based deployment unless they explicitly require the Tauri desktop shell.
-If the browser is remote rather than localhost, plan for HTTPS/WSS by default so WebCrypto device signing remains available.
+如果用户没有给这些值：
 
-### 2. Prepare production endpoints
+- 先用 `YOUR_DOMAIN`
+- 在结果中单列“待用户补充信息”
 
-Create or update production environment values for:
+### 2. 准备前端生产配置
 
-- `VITE_DEFAULT_DEPLOYMENT_MODE=remote`
-- `VITE_REMOTE_WS_URL`
-- `VITE_REMOTE_STUDIO_URL`
+目标是让前端默认工作在远程模式。
 
-Prefer:
+优先准备成：
 
 ```env
+VITE_DEFAULT_DEPLOYMENT_MODE=remote
 VITE_REMOTE_WS_URL=wss://YOUR_DOMAIN/gateway/
 VITE_REMOTE_STUDIO_URL=https://YOUR_DOMAIN/studio
 ```
 
-Use `ws://` and `http://` only for private-network or temporary testing.
-Do not recommend plain remote `ws://` + `http://` for normal browser-based production, because the Gateway handshake now depends on a secure context for device auth.
+如果当前只能先走内网或临时调试，也可以给出临时值，但必须说明：
 
-### 2A. Plan the first-connect auth flow
+- 这是临时方案
+- 正式公网使用时应切回 HTTPS/WSS
 
-Assume the operator will need one of these on first connect:
+### 3. 构建前端
 
-- A shared Gateway onboarding token entered in Settings as `Gateway Token`
-- Or an SSH-tunnel / localhost path where the server explicitly allows insecure local auth
-
-Document both of these if the deployment is user-facing:
-
-- Where the operator gets the onboarding token
-- Whether Gateway requires manual device approval after first connect
-- Which retry step to take if the server rejects a stale paired-device token
-
-### 3. Build the UI
-
-Use the normal production build:
+执行标准构建：
 
 ```bash
 npm run build
 ```
 
-Treat the generated `dist/` as the artifact to publish behind Nginx.
+把 `dist/` 视为待部署产物。
 
-### 4. Prepare Studio service
+### 4. 处理 Gateway 接入方式
 
-Use the provided production entrypoint and service template:
+本技能默认假设：
 
-- `studio/wsgi.py`
-- `studio/requirements-prod.txt`
-- `deploy/linux/systemd/openclaw-studio.service`
+- OpenClaw Gateway 已经或将要运行在同一台 Linux 服务器上
+- UI 通过 Nginx 转发到 Gateway
 
-Prefer running Studio behind `gunicorn` and binding it to `127.0.0.1:19000`.
+OpenClaw agent 在交付时必须明确说明：
 
-### 5. Prepare reverse proxy
+- Gateway 实际监听地址是什么
+- Nginx 如何把 `/gateway/` 转发过去
+- 公网浏览器最终访问的是哪个 `wss://` 地址
+- 首次连接时用户是否需要在页面 Settings 中填写 `Gateway Token`
 
-Use `deploy/linux/nginx/openclaw-center.conf` as the default template.
+### 5. 处理 Studio 服务
 
-Verify that:
+如果仓库当前启用了 Studio：
 
-- `/` serves `dist/index.html`
-- `/gateway/` forwards WebSocket upgrade headers
-- `/studio/` proxies to the Studio service
+- 使用 `studio/wsgi.py`
+- 使用 `studio/requirements-prod.txt`
+- 使用 `deploy/linux/systemd/openclaw-studio.service`
 
-### 6. Validate end to end
+推荐部署方式：
 
-Provide concrete checks, in this order:
+- Studio 绑定在 `127.0.0.1:19000`
+- 再由 Nginx 通过 `/studio` 反向代理
 
-1. `curl http://127.0.0.1:19000/health`
-2. Nginx config test
-3. Browser opens `https://<domain>/`
-4. Open Settings, enter the Gateway onboarding token if needed, and test Gateway
-5. Approve the new operator device on the server if required
-6. Open Workspace and confirm Studio iframe loads
+### 6. 配置 Nginx
 
-## What to edit when asked to "finish deployment"
+默认基于 `deploy/linux/nginx/openclaw-center.conf` 调整。
 
-When the user wants full help, aim to leave behind these repo-side deliverables:
+至少要确认以下内容：
 
-- Root `SKILL.md` if agent guidance is requested
-- Deployment templates under `deploy/linux/`
-- README instructions with a copy-paste prompt for OpenClaw
-- Optional `.env.production.example` or deployment notes if missing
+- `/` 指向前端 `dist/`
+- `/gateway/` 正确转发 WebSocket 升级头
+- `/studio/` 正确反代 Studio
+- HTTPS 证书路径明确
 
-## Recommended validation output
+### 7. 端到端验证
 
-When reporting completion, include:
+验证顺序建议固定如下：
 
-- Final public URLs
-- Files created or updated
-- Commands the user should run on Linux
-- What still requires server credentials or domain/DNS access
+1. Linux 本机验证 Studio 健康检查
+2. Linux 本机验证 Nginx 配置语法
+3. 公网浏览器打开 `https://<domain>/`
+4. 打开 Settings
+5. 如有需要，填写 `Gateway Token`
+6. 测试 Gateway 连接
+7. 如服务端要求审批设备，在服务端批准后再次重试
+8. 打开 Workspace，确认 Studio 正常加载
 
-## Copy-ready operator prompt
+## 七、必须在结果中单独输出的两类内容
 
-When the user asks for a prompt to hand to OpenClaw, prefer a concrete one like this:
+OpenClaw agent 完成任务时，必须明确输出以下两个独立部分，不能混写：
+
+### A. 已自动完成的内容
+
+这里列出 agent 已经实际完成的内容，例如：
+
+- 修改了哪些仓库文件
+- 已生成哪些构建产物
+- 已准备哪些部署模板
+- 已补哪些 README / 配置 / systemd / nginx 内容
+
+### B. 需要用户手动处理的内容
+
+这里必须单独列出所有 agent 无法替用户完成、但部署成功又必不可少的事项。
+
+至少包括以下类别：
+
+- 域名解析
+- HTTPS 证书申请或安装
+- Linux 服务器登录权限
+- Nginx / systemd 重载
+- 云防火墙 / 安全组放行
+- OpenClaw Gateway 的真实启动与运行确认
+- 首次连接时需要填写的 `Gateway Token`
+- 如果服务端需要手动批准设备，则说明审批入口与步骤
+
+如果某项当前不确定，也必须写成“待用户确认项”。
+
+## 八、必须主动提醒用户的常见问题
+
+OpenClaw agent 在交付说明里必须主动提醒以下问题，而不是等用户问：
+
+- 如果没有域名和证书，公网浏览器环境下可能无法达到最佳连接效果
+- 如果 Gateway 只监听 localhost，必须通过 Nginx 反向代理或 SSH 隧道接入
+- 如果页面能打开但连不上 Gateway，优先检查：
+  - `/gateway/` 是否正确反代
+  - 是否使用了 `wss://`
+  - `Gateway Token` 是否正确
+  - 服务端是否需要手动批准新设备
+- 如果首次连通过、后续又失败，要检查 paired-device token 是否失效
+
+## 九、交付格式要求
+
+当 OpenClaw agent 输出部署结果时，建议至少包含以下部分：
+
+1. 部署架构摘要
+2. 已修改文件列表
+3. Linux 服务器需执行的命令
+4. 已自动完成项
+5. 需要用户手动处理项
+6. 验证步骤
+7. 已知风险或未完成项
+
+## 十、推荐直接使用的提示词
+
+如果用户要把任务直接交给 OpenClaw，可优先使用这段提示词：
 
 ```text
-Use the deployment skill at ./SKILL.md and complete the Linux deployment for this repository end to end.
+使用根目录 ./SKILL.md 中的部署技能，按这个固定场景完成部署：
 
-Goal:
-- Deploy the OpenClaw Center UI on my Linux server
-- Keep OpenClaw Gateway and Studio on the same Linux server
-- Make the UI operable from my Windows browser
+- OpenClaw Center 部署在我的 Linux 服务器上
+- OpenClaw Gateway 也部署在这同一台 Linux 服务器上
+- 让我能在 Windows 公网浏览器里打开页面并正常连接 Gateway
 
-Requirements:
-- Prefer same-origin deployment through Nginx
-- Build the frontend for remote mode
-- Configure Gateway as /gateway/ and Studio as /studio
-- Prepare or update all needed files in this repo
-- If server access is unavailable, finish all repo-side work and leave exact server commands and config paths
-- At the end, give me a verification checklist and the remaining manual steps
+要求：
+- 优先使用 Nginx 同域反向代理
+- UI 走 https://<domain>/
+- Gateway 走 wss://<domain>/gateway/
+- 如启用 Studio，走 https://<domain>/studio
+- 前端按 remote 模式构建
+- 需要把仓库内该改的文件都改好
+- 如果你无法直接访问服务器，也要把仓库侧准备完整，并给我精确的手动命令
+- 最后必须单独列出：
+  1. 你已经自动完成的内容
+  2. 需要我手动处理的内容
+  3. 可能遇到的问题与排查建议
 ```
