@@ -1,50 +1,57 @@
-# Linux 部署说明
+# Linux + Cloudflare Tunnel 部署说明
 
-这个项目可以作为纯 Web UI 部署在 Linux 服务器上，然后在 Windows 浏览器中访问。
+这份说明针对下面这个固定场景：
 
-推荐使用同域反向代理：
+- `OpenClaw Center` 部署在 Linux 服务器
+- `OpenClaw Gateway` 也在同一台 Linux 服务器
+- `Studio` 如启用，也在同一台 Linux 服务器
+- 对外访问通过 `Cloudflare Tunnel`
+- Windows PC 通过浏览器公网访问
+
+## 一、推荐架构
+
+```text
+Windows Browser
+  -> Cloudflare DNS
+  -> Cloudflare Tunnel
+  -> cloudflared on Linux
+  -> Nginx on 127.0.0.1:8080
+  -> UI / Gateway / Studio
+```
+
+推荐本机监听：
+
+- Nginx: `127.0.0.1:8080`
+- Gateway: `127.0.0.1:18789`
+- Studio: `127.0.0.1:19000`
+
+## 二、最终访问地址
 
 - UI: `https://YOUR_DOMAIN/`
-- Gateway WebSocket: `wss://YOUR_DOMAIN/gateway/`
+- Gateway: `wss://YOUR_DOMAIN/gateway/`
 - Studio: `https://YOUR_DOMAIN/studio`
 
-这样做有几个好处：
+## 三、仓库内模板文件
 
-- 不需要额外开放多个高位端口给 Windows 客户端
-- 避免浏览器的混合内容问题
-- `Studio` iframe 更容易正常加载
-- 后续加 HTTPS 证书和权限控制更方便
+请优先使用这些模板：
 
-## 一、部署目标
+- Cloudflare Tunnel 场景的 Nginx 配置
+  [openclaw-center-cloudflare-tunnel.conf](/C:/Users/linlic/Desktop/Openclaw%20Center/deploy/linux/nginx/openclaw-center-cloudflare-tunnel.conf)
+- 普通同域 Nginx 配置
+  [openclaw-center.conf](/C:/Users/linlic/Desktop/Openclaw%20Center/deploy/linux/nginx/openclaw-center.conf)
+- cloudflared 配置模板
+  [config.yml.example](/C:/Users/linlic/Desktop/Openclaw%20Center/deploy/linux/cloudflare/config.yml.example)
+- Studio systemd 服务模板
+  [openclaw-studio.service](/C:/Users/linlic/Desktop/Openclaw%20Center/deploy/linux/systemd/openclaw-studio.service)
 
-你最终会得到下面这套结构：
+## 四、前端构建
 
-- OpenClaw Gateway 运行在 Linux 上，例如 `127.0.0.1:18789`
-- Studio 运行在 Linux 上，例如 `127.0.0.1:19000`
-- OpenClaw Center UI 构建为静态文件，由 Nginx 提供
-- Windows 浏览器直接打开 `https://YOUR_DOMAIN/`
-
-## 二、构建 UI
-
-在项目根目录创建 `.env.production`，可以参考同目录下的 `.env.production.example`。
-
-推荐使用同域地址：
+建议使用 remote 模式：
 
 ```env
 VITE_DEFAULT_DEPLOYMENT_MODE=remote
-VITE_LOCAL_WS_URL=ws://127.0.0.1:18789
-VITE_LOCAL_STUDIO_URL=http://127.0.0.1:19000
 VITE_REMOTE_WS_URL=wss://YOUR_DOMAIN/gateway/
 VITE_REMOTE_STUDIO_URL=https://YOUR_DOMAIN/studio
-VITE_APP_NAME=OpenClaw Center
-VITE_APP_VERSION=1.0.0
-```
-
-如果你现在只是内网测试，没有 HTTPS，也可以改成：
-
-```env
-VITE_REMOTE_WS_URL=ws://YOUR_SERVER_IP/gateway/
-VITE_REMOTE_STUDIO_URL=http://YOUR_SERVER_IP/studio
 ```
 
 然后构建：
@@ -54,17 +61,15 @@ npm install
 npm run build
 ```
 
-构建完成后，把 `dist/` 放到服务器上的静态目录，例如：
+构建产物默认部署到：
 
 ```bash
 /opt/openclaw-center/dist
 ```
 
-## 三、部署 Studio
+## 五、Studio 部署
 
-Studio 默认支持通过环境变量指定监听地址。
-
-推荐只监听本机回环地址，再交给 Nginx 反代：
+如启用 Studio：
 
 ```bash
 cd /opt/openclaw-center/studio
@@ -73,147 +78,102 @@ python3 -m venv .venv
 pip install -r requirements-prod.txt
 ```
 
-示例环境变量：
+推荐监听：
 
 ```bash
-export STUDIO_HOST=127.0.0.1
-export STUDIO_PORT=19000
-export FLASK_SECRET_KEY='change-me'
-export STATUS_FILE_PATH='/root/.openclaw/workspace-taizibot/.lifecycle/live_status.json'
+127.0.0.1:19000
 ```
 
-仓库里已经提供了：
-
-- `studio/wsgi.py`
-- `deploy/linux/systemd/openclaw-studio.service`
-
-把 systemd 文件复制到：
+然后使用 systemd 模板：
 
 ```bash
-/etc/systemd/system/openclaw-studio.service
-```
-
-然后按你的实际路径修改：
-
-- `WorkingDirectory`
-- `EnvironmentFile`
-- `ExecStart`
-- `User`
-- `Group`
-
-启动：
-
-```bash
+sudo cp /opt/openclaw-center/deploy/linux/systemd/openclaw-studio.service /etc/systemd/system/openclaw-studio.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now openclaw-studio
-sudo systemctl status openclaw-studio
 ```
 
-## 四、配置 Nginx
+## 六、Nginx 部署
 
-仓库里提供了 Nginx 模板：
+Cloudflare Tunnel 方案下，推荐用：
 
-- `deploy/linux/nginx/openclaw-center.conf`
+- `deploy/linux/nginx/openclaw-center-cloudflare-tunnel.conf`
 
-它会完成三件事：
+核心原则：
 
-- `/` 提供前端静态文件
-- `/gateway/` 反代到本机 Gateway WebSocket
-- `/studio/` 反代到本机 Studio HTTP 服务
+- Nginx 只监听 `127.0.0.1:8080`
+- `/` 提供前端
+- `/gateway/` 转发 WebSocket 到本机 Gateway
+- `/studio/` 转发到本机 Studio
 
-复制到服务器后，修改这些值：
-
-- `server_name`
-- `root`
-- Gateway 上游地址
-- Studio 上游地址
-
-启用配置后重载：
+部署示例：
 
 ```bash
+sudo cp /opt/openclaw-center/deploy/linux/nginx/openclaw-center-cloudflare-tunnel.conf /etc/nginx/conf.d/openclaw-center.conf
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-## 五、Gateway 要求
+## 七、Cloudflare Tunnel 部署
 
-这个 UI 依赖 Gateway 提供以下能力：
+推荐流程：
 
-- WebSocket 连接
-- `gateway.get_status`
-- `gateway.get_agents`
-- `chat.*`
-- `kanban.*`
-- `file.*`
+1. 安装 `cloudflared`
+2. 登录 Cloudflare
+3. 创建 tunnel
+4. 创建 public hostname
+5. 使用本仓库的 `deploy/linux/cloudflare/config.yml.example` 作为配置模板
+6. 安装并启用 cloudflared systemd 服务
 
-如果你的 OpenClaw Gateway 已经在 Linux 上运行，只需要保证：
+配置核心是：
 
-- 它能被 Nginx 反代访问到
-- WebSocket upgrade 正常
-- 返回的协议和当前 UI 对齐
-
-推荐也只监听本机：
-
-```text
-127.0.0.1:18789
+```yaml
+hostname: YOUR_DOMAIN
+service: http://127.0.0.1:8080
 ```
 
-再由 Nginx 暴露给外部。
+也就是说，Tunnel 只需要把域名流量转给本机 Nginx 即可，Gateway 和 Studio 都继续由 Nginx 分发。
 
-## 六、Windows 访问方式
+## 八、验证顺序
 
-完成部署后，在 Windows 浏览器打开：
+建议按这个顺序验证：
 
-```text
-https://YOUR_DOMAIN/
-```
+1. Gateway 本机端口是否监听
+2. Studio 本机健康检查是否正常
+3. Nginx 是否能在本机访问 `127.0.0.1:8080`
+4. cloudflared 服务是否正常
+5. Windows 浏览器打开 `https://YOUR_DOMAIN/`
+6. 在 Settings 中测试 Gateway
+7. 如需要，填写 `Gateway Token`
+8. 如服务端需要批准设备，在服务器侧批准后重试
 
-第一次进入后，打开 Settings，确认：
+## 九、常见问题
 
-- `Deployment Mode = Remote`
-- `Gateway URL = wss://YOUR_DOMAIN/gateway/`
-- `Studio URL = https://YOUR_DOMAIN/studio`
-
-如果你构建时已经写入这两个地址，通常默认就是正确的。
-
-## 七、常见问题
-
-### 1. UI 打开了，但 Gateway 连不上
+### 1. 页面能打开，但 Gateway 连不上
 
 优先检查：
 
-- Gateway 进程是否正常
-- Nginx 的 `/gateway/` 是否配置了 WebSocket 头
-- 浏览器里是否用了 `https://` 页面却连接了 `ws://`
+- Nginx `/gateway/` 是否正确转发
+- WebSocket Upgrade 头是否保留
+- 浏览器访问是否是 `https://`，而 Gateway 是否对应 `wss://`
+- `Gateway Token` 是否正确
+- 服务端是否需要批准新设备
 
-如果页面是 HTTPS，Gateway 必须使用 `wss://`。
-
-### 2. Studio 健康检查正常，但 iframe 不显示
+### 2. Studio 不显示
 
 优先检查：
 
-- `Studio URL` 是否可直接在浏览器打开
-- 反代后是否保留了正确路径
-- 是否被额外的 `X-Frame-Options` 或 CSP 阻止
+- `127.0.0.1:19000` 是否正常
+- `/studio/` 反代是否正确
+- Flask Studio 是否允许 iframe 嵌入
 
-当前仓库里的 Flask Studio 本身没有主动设置禁止 iframe 的头。
+### 3. Tunnel 正常但域名打不开
 
-### 3. 只想先打通，不想上 HTTPS
+优先检查：
 
-可以先在内网环境用：
+- Cloudflare public hostname 是否已绑定
+- `credentials-file` 路径是否正确
+- cloudflared 服务是否启动
 
-- `http://YOUR_SERVER_IP/`
-- `ws://YOUR_SERVER_IP/gateway/`
-- `http://YOUR_SERVER_IP/studio`
+## 十、建议
 
-但如果未来要跨公网访问，建议尽快上 HTTPS/WSS。
-
-## 八、最简部署顺序
-
-1. 在 Linux 上确认 Gateway 已运行
-2. 在 Linux 上启动 Studio
-3. 为前端写 `.env.production`
-4. 执行 `npm run build`
-5. 用 Nginx 提供 `dist/`
-6. 用 Nginx 反代 `/gateway/` 和 `/studio/`
-7. 在 Windows 浏览器打开域名测试
+如果后续希望把部署完整交给 OpenClaw，请直接使用仓库根目录的 [SKILL.md](/C:/Users/linlic/Desktop/Openclaw%20Center/SKILL.md)。

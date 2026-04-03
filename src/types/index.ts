@@ -4,8 +4,16 @@ export type ConnectionStatus =
   | "connected"
   | "reconnecting";
 
-export type ModuleTab = "chat" | "kanban" | "files" | "studio" | "settings";
+export type ModuleTab = "overview" | "chat" | "kanban" | "files" | "studio" | "settings";
 export type DeploymentMode = "local" | "remote" | "custom";
+export type AgentRuntimeStatus =
+  | "idle"
+  | "writing"
+  | "researching"
+  | "executing"
+  | "syncing"
+  | "offline"
+  | "error";
 
 export type MessageRole = "user" | "assistant" | "system";
 
@@ -18,6 +26,35 @@ export interface AgentProfile {
   icon: string;
   enabled: boolean;
   installed: boolean;
+  status: AgentRuntimeStatus;
+  kind?: string;
+  role?: string;
+  version?: string;
+  channel?: string;
+  scopes: string[];
+  capabilities: string[];
+  tags: string[];
+  updatedAt?: number;
+}
+
+export interface AgentTokenUsageStat {
+  agentId: string;
+  name: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  requests: number;
+  lastUpdated?: number;
+}
+
+export interface GatewayTokenUsageStat {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
+  totalRequests: number;
+  agents: AgentTokenUsageStat[];
+  source: "gateway" | "local-logs" | "mock" | "unavailable";
+  updatedAt?: number;
 }
 
 export interface Session {
@@ -156,7 +193,7 @@ export interface SettingsState {
 export interface StudioAgentStatus {
   id: string;
   name: string;
-  status: "idle" | "writing" | "researching" | "executing" | "syncing" | "error";
+  status: AgentRuntimeStatus;
   taskDescription: string;
   lastUpdated: string;
   locale: "CN" | "EN" | "JP";

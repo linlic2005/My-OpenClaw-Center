@@ -109,10 +109,78 @@ describe("GatewayService", () => {
         description: "Writes code",
         icon: "C",
         enabled: true,
-        installed: true
+        installed: true,
+        status: "idle",
+        kind: undefined,
+        role: undefined,
+        version: undefined,
+        channel: undefined,
+        scopes: [],
+        capabilities: [],
+        tags: [],
+        updatedAt: undefined
       }
     ]);
 
     expect(sendSpy).toHaveBeenCalledWith("agents.list", {}, { queueIfOffline: false, timeoutMs: 15_000 });
+  });
+
+  it("normalizes token usage statistics from the gateway", async () => {
+    const service = new GatewayService();
+    vi.spyOn(service, "send").mockResolvedValue({
+      totals: {
+        inputTokens: 1500,
+        outputTokens: 3500,
+        totalTokens: 5000,
+        requests: 25
+      },
+      leaderboard: [
+        {
+          agentId: "coding",
+          name: "Coding Agent",
+          inputTokens: 900,
+          outputTokens: 2100,
+          totalTokens: 3000,
+          requests: 14
+        },
+        {
+          agentId: "research",
+          name: "Research Agent",
+          inputTokens: 600,
+          outputTokens: 1400,
+          totalTokens: 2000,
+          requests: 11
+        }
+      ]
+    });
+
+    await expect(service.getTokenUsage()).resolves.toEqual({
+      totalInputTokens: 1500,
+      totalOutputTokens: 3500,
+      totalTokens: 5000,
+      totalRequests: 25,
+      source: "gateway",
+      updatedAt: expect.any(Number),
+      agents: [
+        {
+          agentId: "coding",
+          name: "Coding Agent",
+          inputTokens: 900,
+          outputTokens: 2100,
+          totalTokens: 3000,
+          requests: 14,
+          lastUpdated: undefined
+        },
+        {
+          agentId: "research",
+          name: "Research Agent",
+          inputTokens: 600,
+          outputTokens: 1400,
+          totalTokens: 2000,
+          requests: 11,
+          lastUpdated: undefined
+        }
+      ]
+    });
   });
 });

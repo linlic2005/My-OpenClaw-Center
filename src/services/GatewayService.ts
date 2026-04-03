@@ -11,11 +11,14 @@ import {
 } from "./GatewayDeviceAuth";
 import type {
   AgentProfile,
+  AgentTokenUsageStat,
+  AgentRuntimeStatus,
   ConnectionStatus,
   GatewayHealth,
   GatewayPushEvent,
   GatewayRequest,
   GatewayResponse,
+  GatewayTokenUsageStat,
   QueuedRequest
 } from "../types";
 
@@ -145,8 +148,126 @@ const iconMap: Record<string, string> = {
   robot: "R"
 };
 
+const statusMap: Record<string, AgentRuntimeStatus> = {
+  idle: "idle",
+  ready: "idle",
+  waiting: "idle",
+  writing: "writing",
+  write: "writing",
+  drafting: "writing",
+  researching: "researching",
+  research: "researching",
+  searching: "researching",
+  executing: "executing",
+  execute: "executing",
+  running: "executing",
+  syncing: "syncing",
+  sync: "syncing",
+  offline: "offline",
+  disconnected: "offline",
+  error: "error",
+  failed: "error"
+};
+
+const TOKEN_USAGE_METHODS = [
+  "metrics.tokens",
+  "usage.tokens",
+  "stats.tokens",
+  "usage.get_token_stats",
+  "agents.token_usage",
+  "dashboard.token_usage"
+] as const;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function toNumber(value: unknown): number {
+  const numeric = typeof value === "number" ? value : Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function pickFirstNumber(record: Record<string, unknown>, keys: string[]): number {
+  for (const key of keys) {
+    if (key in record) {
+      return toNumber(record[key]);
+    }
+  }
+  return 0;
+}
+
+function pickFirstString(record: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function extractAgentUsageList(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload;
+  if (!isRecord(payload)) return [];
+
+  const buckets = ["agents", "rankings", "leaderboard", "usageByAgent", "topAgents", "items"];
+  for (const key of buckets) {
+    if (Array.isArray(payload[key])) {
+      return payload[key] as unknown[];
+    }
+  }
+
+  return [];
+}
+
+function normalizeAgentTokenUsage(raw: unknown, agentsCache: AgentProfile[]): AgentTokenUsageStat {
+  const record = isRecord(raw) ? raw : {};
+  const agentId = pickFirstString(record, ["agentId", "id", "agent_id"]) || createId("agent_usage");
+  const cached = agentsCache.find((agent) => agent.id === agentId);
+  const name = pickFirstString(record, ["name", "agentName", "agent_name", "label"]) || cached?.name || agentId;
+  const inputTokens = pickFirstNumber(record, ["inputTokens", "input", "promptTokens", "prompt_tokens"]);
+  const outputTokens = pickFirstNumber(record, ["outputTokens", "output", "completionTokens", "completion_tokens"]);
+  const totalTokens =
+    pickFirstNumber(record, ["totalTokens", "total", "tokens"]) || inputTokens + outputTokens;
+
+  return {
+    agentId,
+    name,
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    requests: pickFirstNumber(record, ["requests", "requestCount", "request_count", "calls"]),
+    lastUpdated: pickFirstNumber(record, ["updatedAt", "lastUpdated", "ts"]) || undefined
+  };
+}
+
+function normalizeTokenUsage(payload: unknown, agentsCache: AgentProfile[]): GatewayTokenUsageStat {
+  const record = isRecord(payload) ? payload : {};
+  const totals = isRecord(record.totals) ? record.totals : record;
+  const agents = extractAgentUsageList(payload)
+    .map((item) => normalizeAgentTokenUsage(item, agentsCache))
+    .sort((left, right) => right.totalTokens - left.totalTokens);
+
+  const totalInputTokens =
+    pickFirstNumber(totals, ["totalInputTokens", "inputTokens", "promptTokens", "prompt_tokens"]) ||
+    agents.reduce((sum, agent) => sum + agent.inputTokens, 0);
+  const totalOutputTokens =
+    pickFirstNumber(totals, ["totalOutputTokens", "outputTokens", "completionTokens", "completion_tokens"]) ||
+    agents.reduce((sum, agent) => sum + agent.outputTokens, 0);
+  const totalTokens =
+    pickFirstNumber(totals, ["totalTokens", "tokens"]) || totalInputTokens + totalOutputTokens;
+
+  return {
+    totalInputTokens,
+    totalOutputTokens,
+    totalTokens,
+    totalRequests:
+      pickFirstNumber(totals, ["totalRequests", "requests", "requestCount", "request_count"]) ||
+      agents.reduce((sum, agent) => sum + agent.requests, 0),
+    agents,
+    source: "gateway",
+    updatedAt: pickFirstNumber(totals, ["updatedAt", "lastUpdated", "ts"]) || Date.now()
+  };
 }
 
 function normalizeAgentProfile(raw: unknown): AgentProfile {
@@ -154,6 +275,10 @@ function normalizeAgentProfile(raw: unknown): AgentProfile {
   const iconKey = String(record.icon ?? record.kind ?? "robot").toLowerCase();
   const installed = record.installed === undefined ? true : Boolean(record.installed);
   const enabled = record.enabled === undefined ? true : Boolean(record.enabled);
+  const rawStatus = String(record.status ?? record.state ?? record.phase ?? (enabled ? "idle" : "offline")).toLowerCase();
+  const scopes = Array.isArray(record.scopes) ? record.scopes.map(String) : [];
+  const capabilities = Array.isArray(record.capabilities) ? record.capabilities.map(String) : [];
+  const tags = Array.isArray(record.tags) ? record.tags.map(String) : [];
 
   return {
     id: String(record.id ?? createId("agent")),
@@ -161,7 +286,23 @@ function normalizeAgentProfile(raw: unknown): AgentProfile {
     description: String(record.description ?? record.summary ?? ""),
     icon: iconMap[iconKey] ?? String(record.icon ?? record.kind ?? "R").slice(0, 1).toUpperCase(),
     enabled,
-    installed
+    installed,
+    status: statusMap[rawStatus] ?? "idle",
+    kind: typeof record.kind === "string" ? record.kind : undefined,
+    role: typeof record.role === "string" ? record.role : undefined,
+    version: typeof record.version === "string" ? record.version : undefined,
+    channel: typeof record.channel === "string" ? record.channel : undefined,
+    scopes,
+    capabilities,
+    tags,
+    updatedAt:
+      typeof record.updatedAt === "number"
+        ? record.updatedAt
+        : typeof record.lastUpdated === "number"
+          ? record.lastUpdated
+          : typeof record.lastSeen === "number"
+            ? record.lastSeen
+            : undefined
   };
 }
 
@@ -693,6 +834,21 @@ export class GatewayService {
 
     this.agentsCache = rawAgents.map(normalizeAgentProfile);
     return [...this.agentsCache];
+  }
+
+  async getTokenUsage(): Promise<GatewayTokenUsageStat> {
+    let lastError: unknown;
+
+    for (const method of TOKEN_USAGE_METHODS) {
+      try {
+        const payload = await this.send<unknown>(method, {}, { queueIfOffline: false, timeoutMs: 15_000 });
+        return normalizeTokenUsage(payload, this.agentsCache);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError ?? new Error("Gateway token usage endpoint is unavailable");
   }
 
   private async dispatchRequest<TPayload>(

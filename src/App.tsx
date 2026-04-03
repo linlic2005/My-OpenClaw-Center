@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChatModule } from "./components/chat/ChatModule";
+import { OverviewModule } from "./components/dashboard/OverviewModule";
 import { FileModule } from "./components/file/FileModule";
 import { KanbanModule } from "./components/kanban/KanbanModule";
 import { Shell } from "./components/layout/Shell";
@@ -11,10 +12,10 @@ import { useSettingsStore } from "./stores/settingsStore";
 import type { ModuleTab } from "./types";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<ModuleTab>("chat");
-  const { status, connect, reconnect, hydrate } = useGatewayStore();
+  const [activeTab, setActiveTab] = useState<ModuleTab>("overview");
+  const { agents, hydrate, connect, reconnect, status } = useGatewayStore();
   const settings = useSettingsStore((state) => state.settings);
-  const { language, theme, compactMode, gatewayUrl, fontSize } = settings;
+  const { accent, compactMode, fontSize, gatewayUrl, language, theme } = settings;
 
   useEffect(() => {
     void hydrate().then(() => connect(gatewayUrl)).catch(() => undefined);
@@ -25,8 +26,8 @@ export default function App() {
   }, [language]);
 
   useEffect(() => {
-    const root = document.documentElement;
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const root = document.documentElement;
 
     const applyTheme = () => {
       const resolvedTheme = theme === "system" ? (mediaQuery.matches ? "dark" : "light") : theme;
@@ -50,99 +51,103 @@ export default function App() {
       medium: "16px",
       large: "18px"
     } as const;
+
     root.style.fontSize = sizeMap[fontSize];
     root.dataset.fontSize = fontSize;
-  }, [fontSize]);
+    root.style.setProperty("--accent", accent);
+    root.style.setProperty("--accent-strong", accent);
+    root.style.setProperty("--primary", accent);
+    root.style.setProperty("--primary-strong", accent);
+  }, [accent, fontSize]);
 
   const sidebar = useMemo(() => {
-    switch (activeTab) {
-      case "chat":
-        return (
-          <div className="sidebar-card">
-            <div className="sidebar-title">
+    const agentSummary = pickText(language, {
+      "zh-CN": `${agents.length} 个 Agent 已进入指挥面板`,
+      "en-US": `${agents.length} agents visible in the command surface`
+    });
+
+    if (activeTab === "overview") {
+      return (
+        <div className="console-side-stack">
+          <section className="panel console-side-card">
+            <div className="panel-header-title">
+              {pickText(language, { "zh-CN": "整合目标", "en-US": "Integration Goal" })}
+            </div>
+            <div className="settings-card-copy">
               {pickText(language, {
-                "zh-CN": "聊天工作台",
-                "en-US": "Chat Workspace"
+                "zh-CN": "以 ClawX 风格主界面承载 OpenClaw gateway 能力，并融合 Star Office 的场景式 Agent 可视化。",
+                "en-US": "Use a ClawX-style shell for OpenClaw gateway workflows and fuse in the Star Office agent scene."
               })}
             </div>
-            <div className="sidebar-copy">
-              {pickText(language, {
-                "zh-CN": "会话、草稿、引用回复和 Agent 提及都集中在这里管理。",
-                "en-US": "Sessions, drafts, quoted replies, and Agent mentions are managed here."
-              })}
+          </section>
+
+          <section className="panel console-side-card">
+            <div className="panel-header-title">
+              {pickText(language, { "zh-CN": "当前状态", "en-US": "Current State" })}
             </div>
-          </div>
-        );
-      case "kanban":
-        return (
-          <div className="sidebar-card">
-            <div className="sidebar-title">
-              {pickText(language, {
-                "zh-CN": "看板概览",
-                "en-US": "Board Overview"
-              })}
+            <div className="console-side-list">
+              <div className="console-side-list-item">
+                <span>{pickText(language, { "zh-CN": "Gateway", "en-US": "Gateway" })}</span>
+                <strong>{status}</strong>
+              </div>
+              <div className="console-side-list-item">
+                <span>{pickText(language, { "zh-CN": "Agent", "en-US": "Agents" })}</span>
+                <strong>{agents.length}</strong>
+              </div>
+              <div className="console-side-list-item">
+                <span>{pickText(language, { "zh-CN": "地址", "en-US": "Endpoint" })}</span>
+                <strong>{gatewayUrl.replace(/^wss?:\/\//, "")}</strong>
+              </div>
             </div>
-            <div className="sidebar-copy">
-              {pickText(language, {
-                "zh-CN": "跨列流转、冲突修复和卡片编辑全部走真实 Gateway 协议。",
-                "en-US": "Cross-column moves, conflict recovery, and card editing all use the live Gateway protocol."
-              })}
-            </div>
-          </div>
-        );
-      case "files":
-        return (
-          <div className="sidebar-card">
-            <div className="sidebar-title">
-              {pickText(language, {
-                "zh-CN": "配置导航",
-                "en-US": "Config Navigation"
-              })}
-            </div>
-            <div className="sidebar-copy">
-              {pickText(language, {
-                "zh-CN": "这里主要用于查看 Agent 的 USER.md、SOUL.md、MEMORY.md 等核心配置文件。",
-                "en-US": "This area is focused on Agent config files such as USER.md, SOUL.md, and MEMORY.md."
-              })}
-            </div>
-          </div>
-        );
-      case "studio":
-        return (
-          <div className="sidebar-card">
-            <div className="sidebar-title">
-              {pickText(language, {
-                "zh-CN": "工作室模式",
-                "en-US": "Workspace Mode"
-              })}
-            </div>
-            <div className="sidebar-copy">
-              {pickText(language, {
-                "zh-CN": "优先接入 Flask 子服务；不可用时回退到本地像素工作室视图。",
-                "en-US": "The Flask subservice is preferred, with a local pixel workspace fallback when unavailable."
-              })}
-            </div>
-          </div>
-        );
-      case "settings":
-        return (
-          <div className="sidebar-card">
-            <div className="sidebar-title">
-              {pickText(language, {
-                "zh-CN": "系统设置",
-                "en-US": "System Settings"
-              })}
-            </div>
-            <div className="sidebar-copy">
-              {pickText(language, {
-                "zh-CN": "Gateway、主题、渠道、技能和数据管理统一在这里配置。",
-                "en-US": "Gateway, theme, channels, skills, and data management live here."
-              })}
-            </div>
-          </div>
-        );
+          </section>
+        </div>
+      );
     }
-  }, [activeTab, language]);
+
+    return (
+      <div className="console-side-stack">
+        <section className="panel console-side-card">
+          <div className="panel-header-title">
+            {pickText(language, { "zh-CN": "模块提示", "en-US": "Module Hint" })}
+          </div>
+          <div className="settings-card-copy">
+            {activeTab === "chat" &&
+              pickText(language, {
+                "zh-CN": "这里继续沿用现有 Gateway 会话能力，适合直接验证本地 openclaw gateway 的对话链路。",
+                "en-US": "This keeps the existing Gateway conversation flow and is ideal for validating the local openclaw gateway chat path."
+              })}
+            {activeTab === "kanban" &&
+              pickText(language, {
+                "zh-CN": "看板保持远端协议驱动，适合观察任务状态是否随 Gateway 同步。",
+                "en-US": "The board stays protocol-driven and is useful for observing Gateway task synchronization."
+              })}
+            {activeTab === "files" &&
+              pickText(language, {
+                "zh-CN": "配置查看器用于核验 Agent 的 USER / SOUL / MEMORY 文件是否可达。",
+                "en-US": "Use the config viewer to inspect USER / SOUL / MEMORY accessibility for each agent."
+              })}
+            {activeTab === "studio" &&
+              pickText(language, {
+                "zh-CN": "工作室页优先嵌入 Flask Studio，失败时自动回退到 Star Office 场景视图。",
+                "en-US": "The Studio page embeds Flask Studio first and falls back to the Star Office scene automatically."
+              })}
+            {activeTab === "settings" &&
+              pickText(language, {
+                "zh-CN": "设置页继续承担连接测试、日志和部署配置，是仓库发布前的重要收口页面。",
+                "en-US": "Settings remains the release-readiness page for connectivity, logs, and deployment configuration."
+              })}
+          </div>
+        </section>
+
+        <section className="panel console-side-card">
+          <div className="panel-header-title">
+            {pickText(language, { "zh-CN": "Agent 快照", "en-US": "Agent Snapshot" })}
+          </div>
+          <div className="settings-card-copy">{agentSummary}</div>
+        </section>
+      </div>
+    );
+  }, [activeTab, agents.length, gatewayUrl, language, status]);
 
   const renderConnectionScreen = (title: string, meta: string, loading = false) => (
     <div className="connection-screen">
@@ -156,10 +161,7 @@ export default function App() {
           </div>
         ) : (
           <button className="primary-button" onClick={() => void reconnect()}>
-            {pickText(language, {
-              "zh-CN": "重新连接",
-              "en-US": "Reconnect"
-            })}
+            {pickText(language, { "zh-CN": "重新连接", "en-US": "Reconnect" })}
           </button>
         )}
       </div>
@@ -167,12 +169,13 @@ export default function App() {
   );
 
   const content = useMemo(() => {
+    if (activeTab === "overview") {
+      return <OverviewModule onNavigate={setActiveTab} />;
+    }
+
     if (status === "connecting" && activeTab !== "settings") {
       return renderConnectionScreen(
-        pickText(language, {
-          "zh-CN": "正在连接 Gateway",
-          "en-US": "Connecting to Gateway"
-        }),
+        pickText(language, { "zh-CN": "正在连接 Gateway", "en-US": "Connecting to Gateway" }),
         gatewayUrl,
         true
       );
@@ -180,10 +183,7 @@ export default function App() {
 
     if (status === "disconnected" && activeTab !== "settings" && activeTab !== "studio") {
       return renderConnectionScreen(
-        pickText(language, {
-          "zh-CN": "连接已断开",
-          "en-US": "Connection Lost"
-        }),
+        pickText(language, { "zh-CN": "Gateway 连接已断开", "en-US": "Gateway Connection Lost" }),
         gatewayUrl
       );
     }

@@ -3,19 +3,8 @@ import { pickText } from "../../lib/i18n";
 import { studioService } from "../../services/StudioService";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useStudioStore } from "../../stores/studioStore";
+import { OfficeScene } from "./OfficeScene";
 
-const zoneMap = {
-  idle: "lounge",
-  writing: "writing",
-  researching: "research",
-  executing: "execute",
-  syncing: "sync",
-  error: "bug"
-} as const;
-
-const zoneOrder = ["lounge", "writing", "research", "execute", "sync", "bug"] as const;
-
-type ZoneKey = (typeof zoneOrder)[number];
 type StudioEmbedStatus = "checking" | "ready" | "fallback";
 
 function WorkspaceFallback() {
@@ -29,199 +18,21 @@ function WorkspaceFallback() {
     void load(language, studioUrl);
   }, [language, load, studioUrl]);
 
-  const sceneMap = useMemo(
-    () => ({
-      idle: pickText(language, { "zh-CN": "休息区", "en-US": "Lounge" }),
-      writing: pickText(language, { "zh-CN": "写作位", "en-US": "Writing Desk" }),
-      researching: pickText(language, { "zh-CN": "研究位", "en-US": "Research Desk" }),
-      executing: pickText(language, { "zh-CN": "执行位", "en-US": "Execution Desk" }),
-      syncing: pickText(language, { "zh-CN": "同步位", "en-US": "Sync Desk" }),
-      error: pickText(language, { "zh-CN": "异常区", "en-US": "Bug Zone" })
-    }),
-    [language]
-  );
-
-  const zoneTitle = useMemo(
-    () =>
-      ({
-        lounge: pickText(language, { "zh-CN": "休息区", "en-US": "Lounge" }),
-        writing: pickText(language, { "zh-CN": "写作区", "en-US": "Writing" }),
-        research: pickText(language, { "zh-CN": "研究区", "en-US": "Research" }),
-        execute: pickText(language, { "zh-CN": "执行区", "en-US": "Execute" }),
-        sync: pickText(language, { "zh-CN": "同步区", "en-US": "Sync" }),
-        bug: pickText(language, { "zh-CN": "异常区", "en-US": "Bug Zone" })
-      }) satisfies Record<ZoneKey, string>,
-    [language]
-  );
-
-  const zoneHint = useMemo(
-    () =>
-      ({
-        lounge: pickText(language, {
-          "zh-CN": "空闲或已完成的 Agent 会回到这里等待下一项任务。",
-          "en-US": "Idle or completed agents return here to wait for the next task."
-        }),
-        writing: pickText(language, {
-          "zh-CN": "文案整理、方案输出和结构化撰写主要发生在这里。",
-          "en-US": "Writing-heavy tasks settle into this desk."
-        }),
-        research: pickText(language, {
-          "zh-CN": "搜索、比对和资料分析会停留在研究位。",
-          "en-US": "Search and analysis work stays on the research station."
-        }),
-        execute: pickText(language, {
-          "zh-CN": "命令执行、调试和构建任务使用主操作区。",
-          "en-US": "Command execution and build work use the main rig."
-        }),
-        sync: pickText(language, {
-          "zh-CN": "同步、推送和汇总处理通过这里流转。",
-          "en-US": "Sync, push, and aggregation work flows through the dock."
-        }),
-        bug: pickText(language, {
-          "zh-CN": "冲突或错误会在这里高亮展示。",
-          "en-US": "Errors and conflicts light up the bug zone."
-        })
-      }) satisfies Record<ZoneKey, string>,
-    [language]
-  );
-
-  const agentsByZone = useMemo(() => {
-    return zoneOrder.reduce<Record<ZoneKey, typeof agents>>((acc, zone) => {
-      acc[zone] = agents.filter((agent) => zoneMap[agent.status] === zone);
-      return acc;
-    }, {} as Record<ZoneKey, typeof agents>);
-  }, [agents]);
-
-  const memoItems = useMemo(
-    () =>
-      agents.map((agent) =>
-        pickText(language, {
-          "zh-CN": `${agent.name}: ${agent.taskDescription}`,
-          "en-US": `${agent.name}: ${agent.taskDescription}`
-        })
-      ),
-    [agents, language]
-  );
-
   return (
     <div className="studio-shell studio-shell-office">
-      <div className="studio-hero studio-hero-office">
-        <div>
-          <div className="section-title">
-            {pickText(language, { "zh-CN": "工作室", "en-US": "Workspace" })}
-          </div>
-          <div className="section-meta">
-            {pickText(language, {
-              "zh-CN": "当前显示本地 fallback 视图。Flask 子服务可用后会自动切换到 iframe 工作室。",
-              "en-US": "This is the local fallback view. It switches to the Flask iframe automatically once the service is available."
-            })}
-          </div>
-        </div>
-        <div className="studio-hero-actions">
-          <div className="badge badge-success">
-            {pickText(language, {
-              "zh-CN": "本地像素 fallback",
-              "en-US": "Pixel fallback"
-            })}
-          </div>
-          <div className="badge">
-            {pickText(language, {
-              "zh-CN": `${agents.length} 个 Agent`,
-              "en-US": `${agents.length} agents`
-            })}
-          </div>
-        </div>
-      </div>
-
-      <div className="office-stage">
-        <div className="office-windowband">
-          <span className="office-windowband-title">OPENCLAW PIXEL OFFICE</span>
-          <div className="office-windowband-lights">
-            <span />
-            <span />
-            <span />
-          </div>
-        </div>
-
-        <div className="office-layout">
-          <section className="office-room">
-            <div className="office-room-grid" />
-            <div className="office-furniture sofa" />
-            <div className="office-furniture plant" />
-            <div className="office-furniture write-desk" />
-            <div className="office-furniture research-desk" />
-            <div className="office-furniture execute-desk" />
-            <div className="office-furniture sync-dock" />
-            <div className="office-furniture bug-terminal" />
-            <div className="office-furniture shelf" />
-
-            {zoneOrder.map((zone) => (
-              <div key={zone} className={`office-zone office-zone-${zone}`}>
-                <div className="office-zone-label">{zoneTitle[zone]}</div>
-                <div className="office-zone-agents">
-                  {agentsByZone[zone].length === 0 ? (
-                    <div className="office-empty-slot">
-                      {pickText(language, { "zh-CN": "空位", "en-US": "Empty" })}
-                    </div>
-                  ) : (
-                    agentsByZone[zone].map((agent, index) => (
-                      <article
-                        key={agent.id}
-                        className={`office-agent office-agent-${zone}`}
-                        style={{ ["--agent-offset" as string]: `${index * 14}px` }}
-                      >
-                        <div className="office-agent-bubble">{agent.taskDescription}</div>
-                        <div className="office-agent-sprite" aria-hidden="true">
-                          <span className="pixel-head" />
-                          <span className="pixel-body" />
-                          <span className="pixel-shadow" />
-                        </div>
-                        <div className="office-agent-meta">
-                          <div className="office-agent-name">{agent.name}</div>
-                          <div className="office-agent-status">{sceneMap[agent.status]}</div>
-                        </div>
-                      </article>
-                    ))
-                  )}
-                </div>
-              </div>
-            ))}
-          </section>
-
-          <aside className="office-sidebar">
-            <section className="office-panel office-panel-note">
-              <div className="office-panel-title">
-                {pickText(language, { "zh-CN": "当前便签", "en-US": "Today's Notes" })}
-              </div>
-              <div className="office-note-stack">
-                {memoItems.map((item, index) => (
-                  <div key={`${item}-${index}`} className="office-note-card">
-                    <span className="office-note-pin" />
-                    <p>{item}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="office-panel">
-              <div className="office-panel-title">
-                {pickText(language, { "zh-CN": "区域说明", "en-US": "Zone Guide" })}
-              </div>
-              <div className="office-legend">
-                {zoneOrder.map((zone) => (
-                  <div key={zone} className="office-legend-item">
-                    <div className={`office-legend-chip office-legend-chip-${zone}`} />
-                    <div>
-                      <div className="office-legend-title">{zoneTitle[zone]}</div>
-                      <div className="office-legend-copy">{zoneHint[zone]}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </aside>
-        </div>
-      </div>
+      <OfficeScene
+        agents={agents}
+        language={language}
+        title={pickText(language, { "zh-CN": "Star Office 工作室", "en-US": "Star Office Workspace" })}
+        subtitle={pickText(language, {
+          "zh-CN": "当前显示本地工作室场景视图。若 Flask Studio 可用，会自动切换为 iframe 实时页面。",
+          "en-US": "Showing the local workspace scene. It switches to the live iframe when Flask Studio is available."
+        })}
+        badge={pickText(language, {
+          "zh-CN": "场景模式",
+          "en-US": "Scene mode"
+        })}
+      />
     </div>
   );
 }
@@ -242,9 +53,8 @@ export function StudioModule() {
     }
 
     let cancelled = false;
-    setEmbedStatus("checking");
-
     const controller = new AbortController();
+    setEmbedStatus("checking");
     studioService.setBaseUrl(studioUrl);
 
     fetch(`${studioUrl}/health`, {
@@ -254,8 +64,9 @@ export function StudioModule() {
     })
       .then((response) => {
         if (!response.ok) {
-          throw new Error("Studio service is unavailable");
+          throw new Error("Studio service unavailable");
         }
+
         if (!cancelled) {
           setEmbedStatus("ready");
         }
@@ -270,7 +81,7 @@ export function StudioModule() {
       cancelled = true;
       controller.abort();
     };
-  }, [language, studioEnabled, studioUrl, theme]);
+  }, [studioEnabled, studioUrl]);
 
   const iframeSrc = useMemo(() => {
     const query = new URLSearchParams({
@@ -289,12 +100,12 @@ export function StudioModule() {
       <div className="studio-shell">
         <div className="panel studio-embed-shell">
           <div className="section-title">
-            {pickText(language, { "zh-CN": "正在连接工作室子服务", "en-US": "Connecting to Studio service" })}
+            {pickText(language, { "zh-CN": "正在连接 Studio 服务", "en-US": "Connecting to Studio" })}
           </div>
           <div className="section-meta">
             {pickText(language, {
-              "zh-CN": "正在检查本地 Flask 服务是否可用。",
-              "en-US": "Checking whether the local Flask service is available."
+              "zh-CN": "正在检查远端工作室服务是否可用。",
+              "en-US": "Checking whether the remote workspace service is available."
             })}
           </div>
           <div className="progress-track large">
@@ -311,11 +122,13 @@ export function StudioModule() {
         <div className="panel">
           <div className="section-header">
             <div>
-              <div className="section-title">{pickText(language, { "zh-CN": "工作室", "en-US": "Workspace" })}</div>
+              <div className="section-title">
+                {pickText(language, { "zh-CN": "Studio 实时工作室", "en-US": "Studio Live Workspace" })}
+              </div>
               <div className="section-meta">
                 {pickText(language, {
-                  "zh-CN": "已接入 Flask 子服务，下面展示实时工作室视图。",
-                  "en-US": "The Flask subservice is active. The live workspace is embedded below."
+                  "zh-CN": "已接入远端 Flask Studio，下方展示实时工作室页面。",
+                  "en-US": "The remote Flask Studio is active. The live workspace is embedded below."
                 })}
               </div>
             </div>

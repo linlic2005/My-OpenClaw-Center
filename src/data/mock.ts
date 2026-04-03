@@ -1,7 +1,9 @@
 import type {
   AgentProfile,
+  AgentTokenUsageStat,
   ChatMessage,
   FileItem,
+  GatewayTokenUsageStat,
   KanbanCard,
   KanbanColumn,
   Session,
@@ -21,7 +23,13 @@ export function getMockAgents(language: AppLanguage): AgentProfile[] {
       description: language === "zh-CN" ? "代码开发和调试助手" : "Code development and debugging assistant",
       icon: "C",
       enabled: true,
-      installed: true
+      installed: true,
+      status: "executing",
+      kind: "coding",
+      role: "operator",
+      scopes: ["operator.read", "operator.write"],
+      capabilities: ["chat", "kanban", "file"],
+      tags: ["core", "gateway"]
     },
     {
       id: "agent_research",
@@ -29,7 +37,13 @@ export function getMockAgents(language: AppLanguage): AgentProfile[] {
       description: language === "zh-CN" ? "信息检索和分析助手" : "Research and analysis assistant",
       icon: "R",
       enabled: true,
-      installed: true
+      installed: true,
+      status: "researching",
+      kind: "research",
+      role: "operator",
+      scopes: ["operator.read"],
+      capabilities: ["search", "analysis"],
+      tags: ["insight"]
     },
     {
       id: "agent_writing",
@@ -37,7 +51,13 @@ export function getMockAgents(language: AppLanguage): AgentProfile[] {
       description: language === "zh-CN" ? "写作和内容创作助手" : "Writing and content creation assistant",
       icon: "W",
       enabled: false,
-      installed: true
+      installed: true,
+      status: "idle",
+      kind: "writing",
+      role: "operator",
+      scopes: ["operator.read"],
+      capabilities: ["drafting"],
+      tags: ["content"]
     },
     {
       id: "agent_design",
@@ -45,9 +65,54 @@ export function getMockAgents(language: AppLanguage): AgentProfile[] {
       description: language === "zh-CN" ? "UI / UX 设计助手" : "UI / UX design assistant",
       icon: "D",
       enabled: false,
-      installed: false
+      installed: false,
+      status: "offline",
+      kind: "design",
+      role: "operator",
+      scopes: [],
+      capabilities: ["visual-review"],
+      tags: ["optional"]
     }
   ];
+}
+
+export function getMockTokenUsageStats(agents?: AgentProfile[]): GatewayTokenUsageStat {
+  const sourceAgents = agents?.length
+    ? agents
+    : [
+        { id: "agent_coding", name: "Coding Agent" },
+        { id: "agent_research", name: "Research Agent" },
+        { id: "agent_writing", name: "Writing Agent" }
+      ];
+
+  const rankedAgents: AgentTokenUsageStat[] = sourceAgents.slice(0, 6).map((agent, index) => {
+    const inputTokens = 4200 - index * 900;
+    const outputTokens = 6800 - index * 1200;
+    const totalTokens = Math.max(inputTokens + outputTokens, 900);
+
+    return {
+      agentId: agent.id,
+      name: agent.name,
+      inputTokens: Math.max(inputTokens, 300),
+      outputTokens: Math.max(outputTokens, 400),
+      totalTokens,
+      requests: Math.max(32 - index * 6, 4),
+      lastUpdated: Date.now() - index * 60_000
+    };
+  });
+
+  const totalInputTokens = rankedAgents.reduce((sum, agent) => sum + agent.inputTokens, 0);
+  const totalOutputTokens = rankedAgents.reduce((sum, agent) => sum + agent.outputTokens, 0);
+
+  return {
+    totalInputTokens,
+    totalOutputTokens,
+    totalTokens: totalInputTokens + totalOutputTokens,
+    totalRequests: rankedAgents.reduce((sum, agent) => sum + agent.requests, 0),
+    agents: rankedAgents,
+    source: "mock",
+    updatedAt: Date.now()
+  };
 }
 
 export function getMockSessions(language: AppLanguage): Session[] {

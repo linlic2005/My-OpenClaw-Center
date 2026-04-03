@@ -1,7 +1,18 @@
 {
   "name": "openclaw-center",
   "version": "1.0.0",
-  "private": true,
+  "private": false,
+  "description": "A ClawX-inspired OpenClaw command center with Star Office workspace visualization and official Gateway connectivity.",
+  "license": "MIT",
+  "author": "OpenClaw Center contributors",
+  "keywords": [
+    "openclaw",
+    "gateway",
+    "react",
+    "tauri",
+    "agents",
+    "dashboard"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -15,6 +15,7 @@ function normalizeStatus(value: unknown): StudioAgentStatus["status"] {
     value === "researching" ||
     value === "executing" ||
     value === "syncing" ||
+    value === "offline" ||
     value === "error"
   ) {
     return value;

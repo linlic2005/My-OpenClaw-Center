@@ -1,109 +1,107 @@
 ---
-name: openclaw-center-linux-public-deploy
-description: 将 OpenClaw Center 部署到同一台 Linux 服务器，并与该服务器上的 OpenClaw Gateway 配合工作，让 Windows 用户能够通过公网浏览器打开页面和使用系统。适用于用户明确提到 Linux 服务器、公网访问、同机部署 Gateway、Nginx、HTTPS/WSS、systemd，或要求区分自动步骤与手动步骤时。
+name: openclaw-center-linux-cloudflare-tunnel-deploy
+description: 把 OpenClaw Center 与 OpenClaw Gateway 一起部署到同一台 Linux 服务器，并通过 Cloudflare Tunnel 绑定用户域名，让 Windows PC 可以通过公网浏览器访问 UI、连接 Gateway、使用 Studio。
 ---
 
-# OpenClaw Center Linux 公网部署技能
+# OpenClaw Center 部署技能
 
-本技能是写给 OpenClaw agent 的部署说明。
+这份技能文档是写给 OpenClaw agent 的。
 
-目标场景已经固定，不要擅自切换到别的部署方案：
+目标场景已经固定，不要擅自切换为别的方案：
 
 - OpenClaw Center 部署在用户的 Linux 服务器上
-- OpenClaw Gateway 也部署在这同一台 Linux 服务器上
-- Windows 用户通过公网浏览器访问页面
-- 页面必须能正常连接同机部署的 Gateway
+- OpenClaw Gateway 也部署在同一台 Linux 服务器上
+- 如果启用 Studio，也部署在同一台 Linux 服务器上
+- 用户通过挂在 Cloudflare 上的域名访问
+- 公网访问通过 Cloudflare Tunnel 完成
+- Windows PC 上的浏览器必须能打开 UI，并正常连接 Gateway
 
-如果没有特殊说明，默认按“浏览器公网访问 + 同机 Gateway + 同域反向代理”方案实施。
+## 一、最终部署目标
 
-## 一、最终目标
+除非用户明确缩小范围，否则尽量交付下面这套结果：
 
-除非用户明确缩小范围，否则尽量交付以下结果：
+- `OpenClaw Center` 前端已完成生产构建
+- `OpenClaw Gateway` 与 UI 同机工作
+- `Studio` 如启用，也与 UI 同机工作
+- Nginx 只在服务器本机监听，不直接暴露公网端口
+- `cloudflared` 通过 Tunnel 把域名流量转发到本机 Nginx
+- 浏览器访问地址为：
+  - UI: `https://YOUR_DOMAIN/`
+  - Gateway: `wss://YOUR_DOMAIN/gateway/`
+  - Studio: `https://YOUR_DOMAIN/studio/`
+- 最终给出可验证的部署结果、手动步骤和排障说明
 
-- 前端完成生产构建
-- UI 可由公网浏览器访问
-- Gateway 与 UI 通过同域反向代理连通
-- Windows 端可直接打开页面并完成 Gateway 连接
-- Studio 如有启用，也通过同域方式接入
-- 产出完整的部署说明、验证步骤和问题边界说明
+## 二、固定架构
 
-## 二、固定部署方式
+优先使用这套固定结构：
 
-优先使用以下结构，不要随意改成直连端口暴露：
+```text
+Windows Browser
+  -> Cloudflare DNS
+  -> Cloudflare Tunnel
+  -> cloudflared on Linux
+  -> Nginx on 127.0.0.1:8080
+  -> UI / Gateway / Studio
+```
 
-- UI: `https://<你的域名>/`
-- Gateway: `wss://<你的域名>/gateway/`
-- Studio: `https://<你的域名>/studio`
+推荐本机服务绑定方式：
 
-原因：
+- Nginx: `127.0.0.1:8080`
+- Gateway: `127.0.0.1:18789`
+- Studio: `127.0.0.1:19000`
 
-- Windows 公网浏览器访问时，更容易满足安全上下文要求
-- 当前 Gateway 官方连接方式依赖设备签名与正式握手，远程环境优先使用 HTTPS/WSS
-- 可避免浏览器 mixed-content 问题
-- 可减少跨域 iframe 与跨域认证问题
+不要默认直接把 Gateway 或 Studio 暴露到公网。
 
 ## 三、必须遵守的连接前提
 
-OpenClaw agent 在处理部署时，必须把以下前提写清楚并按此实现：
+在部署或调试时，必须遵守以下前提：
 
-1. 不要使用旧的“连接 WebSocket 后直接调用 `gateway.get_status`”方案。
-2. 当前客户端使用的是官方 Gateway 连接流程：
-   - 接收 `connect.challenge`
-   - 发送 `req/connect`
-   - 首连使用 `Gateway Token`
-   - 成功后缓存 paired-device token
-3. 远程公网访问时，默认需要：
-   - 页面使用 `https://`
-   - Gateway 使用 `wss://`
-4. 如果用户只给了 IP 没给域名，也要明确告诉用户：
-   - 可以临时调试
-   - 但正式公网环境更推荐域名 + HTTPS 证书
+1. 当前前端使用的是官方式 Gateway 握手，不是旧的“连接后直接请求状态”的方式
+2. 远程访问必须优先按同域路径来处理
+3. 前端 remote 模式必须配置成：
+   - `VITE_REMOTE_WS_URL=wss://YOUR_DOMAIN/gateway/`
+   - `VITE_REMOTE_STUDIO_URL=https://YOUR_DOMAIN/studio`
+4. 首次连接若 Gateway 需要共享 token，用户必须能在 Settings 中填写 `Gateway Token`
+5. 如果服务端需要批准新设备，必须在最终说明中明确这一点
 
-## 四、部署时优先使用的仓库文件
+## 四、优先读取的仓库文件
 
-在开始部署前，优先读取并复用以下文件：
+执行前优先读取并复用这些文件：
 
 - `README.md`
 - `README.zh-CN.md`
 - `项目说明文档.md`
 - `deploy/linux/README.zh-CN.md`
 - `deploy/linux/nginx/openclaw-center.conf`
+- `deploy/linux/nginx/openclaw-center-cloudflare-tunnel.conf`
+- `deploy/linux/cloudflare/config.yml.example`
 - `deploy/linux/systemd/openclaw-studio.service`
 - `deploy/linux/systemd/openclaw-studio.env.example`
 - `studio/requirements-prod.txt`
 - `studio/wsgi.py`
 
-## 五、执行原则
+## 五、标准执行顺序
 
-- 优先修改仓库内配置文件，而不是只给零散命令
-- 优先使用 Nginx 同域反向代理，不要默认公开暴露 Gateway 原始端口
-- 如果用户没有提供完整生产信息，先用清晰占位符补齐模板
-- 如果当前环境无法登录用户服务器，也要完成仓库侧所有准备，并给出精确的手动执行说明
-- 必须明确标出“自动完成项”和“需要用户手动处理项”
-- 如果某一步因为权限、证书、DNS、云防火墙、服务器访问权限制而无法完成，不能模糊带过，必须单独列出来
+### 1. 确认基础信息
 
-## 六、标准执行流程
+先确认或假设以下信息：
 
-### 1. 先确认公网访问入口
+- Linux 服务器路径，例如 `/opt/openclaw-center`
+- 域名，例如 `openclaw.example.com`
+- Cloudflare Tunnel 名称
+- Tunnel UUID
+- cloudflared 凭据文件路径
+- OpenClaw Gateway 是否已经在服务器安装
+- 是否启用 Studio
 
-确认或假设以下信息：
+如果用户没有提供完整信息：
 
-- 公网域名，或临时公网 IP
-- Nginx 站点根路径
-- UI 最终访问地址
-- Gateway 是否通过 `/gateway/` 反代
-- Studio 是否通过 `/studio` 反代
+- 用占位符写清模板
+- 但不要跳过仓库侧准备工作
 
-如果用户没有给这些值：
+### 2. 准备前端 remote 配置
 
-- 先用 `YOUR_DOMAIN`
-- 在结果中单列“待用户补充信息”
-
-### 2. 准备前端生产配置
-
-目标是让前端默认工作在远程模式。
-
-优先准备成：
+前端构建目标应为：
 
 ```env
 VITE_DEFAULT_DEPLOYMENT_MODE=remote
@@ -111,148 +109,161 @@ VITE_REMOTE_WS_URL=wss://YOUR_DOMAIN/gateway/
 VITE_REMOTE_STUDIO_URL=https://YOUR_DOMAIN/studio
 ```
 
-如果当前只能先走内网或临时调试，也可以给出临时值，但必须说明：
-
-- 这是临时方案
-- 正式公网使用时应切回 HTTPS/WSS
-
-### 3. 构建前端
-
-执行标准构建：
+然后执行：
 
 ```bash
+npm install
 npm run build
 ```
 
-把 `dist/` 视为待部署产物。
+### 3. 准备 Studio
 
-### 4. 处理 Gateway 接入方式
+如果启用 Studio：
 
-本技能默认假设：
-
-- OpenClaw Gateway 已经或将要运行在同一台 Linux 服务器上
-- UI 通过 Nginx 转发到 Gateway
-
-OpenClaw agent 在交付时必须明确说明：
-
-- Gateway 实际监听地址是什么
-- Nginx 如何把 `/gateway/` 转发过去
-- 公网浏览器最终访问的是哪个 `wss://` 地址
-- 首次连接时用户是否需要在页面 Settings 中填写 `Gateway Token`
-
-### 5. 处理 Studio 服务
-
-如果仓库当前启用了 Studio：
-
-- 使用 `studio/wsgi.py`
 - 使用 `studio/requirements-prod.txt`
+- 使用 `studio/wsgi.py`
+- 绑定到 `127.0.0.1:19000`
 - 使用 `deploy/linux/systemd/openclaw-studio.service`
 
-推荐部署方式：
+### 4. 准备 Nginx
 
-- Studio 绑定在 `127.0.0.1:19000`
-- 再由 Nginx 通过 `/studio` 反向代理
+Cloudflare Tunnel 方案下，优先使用：
 
-### 6. 配置 Nginx
-
-默认基于 `deploy/linux/nginx/openclaw-center.conf` 调整。
-
-至少要确认以下内容：
-
-- `/` 指向前端 `dist/`
-- `/gateway/` 正确转发 WebSocket 升级头
-- `/studio/` 正确反代 Studio
-- HTTPS 证书路径明确
-
-### 7. 端到端验证
-
-验证顺序建议固定如下：
-
-1. Linux 本机验证 Studio 健康检查
-2. Linux 本机验证 Nginx 配置语法
-3. 公网浏览器打开 `https://<domain>/`
-4. 打开 Settings
-5. 如有需要，填写 `Gateway Token`
-6. 测试 Gateway 连接
-7. 如服务端要求审批设备，在服务端批准后再次重试
-8. 打开 Workspace，确认 Studio 正常加载
-
-## 七、必须在结果中单独输出的两类内容
-
-OpenClaw agent 完成任务时，必须明确输出以下两个独立部分，不能混写：
-
-### A. 已自动完成的内容
-
-这里列出 agent 已经实际完成的内容，例如：
-
-- 修改了哪些仓库文件
-- 已生成哪些构建产物
-- 已准备哪些部署模板
-- 已补哪些 README / 配置 / systemd / nginx 内容
-
-### B. 需要用户手动处理的内容
-
-这里必须单独列出所有 agent 无法替用户完成、但部署成功又必不可少的事项。
-
-至少包括以下类别：
-
-- 域名解析
-- HTTPS 证书申请或安装
-- Linux 服务器登录权限
-- Nginx / systemd 重载
-- 云防火墙 / 安全组放行
-- OpenClaw Gateway 的真实启动与运行确认
-- 首次连接时需要填写的 `Gateway Token`
-- 如果服务端需要手动批准设备，则说明审批入口与步骤
-
-如果某项当前不确定，也必须写成“待用户确认项”。
-
-## 八、必须主动提醒用户的常见问题
-
-OpenClaw agent 在交付说明里必须主动提醒以下问题，而不是等用户问：
-
-- 如果没有域名和证书，公网浏览器环境下可能无法达到最佳连接效果
-- 如果 Gateway 只监听 localhost，必须通过 Nginx 反向代理或 SSH 隧道接入
-- 如果页面能打开但连不上 Gateway，优先检查：
-  - `/gateway/` 是否正确反代
-  - 是否使用了 `wss://`
-  - `Gateway Token` 是否正确
-  - 服务端是否需要手动批准新设备
-- 如果首次连通过、后续又失败，要检查 paired-device token 是否失效
-
-## 九、交付格式要求
-
-当 OpenClaw agent 输出部署结果时，建议至少包含以下部分：
-
-1. 部署架构摘要
-2. 已修改文件列表
-3. Linux 服务器需执行的命令
-4. 已自动完成项
-5. 需要用户手动处理项
-6. 验证步骤
-7. 已知风险或未完成项
-
-## 十、推荐直接使用的提示词
-
-如果用户要把任务直接交给 OpenClaw，可优先使用这段提示词：
-
-```text
-使用根目录 ./SKILL.md 中的部署技能，按这个固定场景完成部署：
-
-- OpenClaw Center 部署在我的 Linux 服务器上
-- OpenClaw Gateway 也部署在这同一台 Linux 服务器上
-- 让我能在 Windows 公网浏览器里打开页面并正常连接 Gateway
+- `deploy/linux/nginx/openclaw-center-cloudflare-tunnel.conf`
 
 要求：
-- 优先使用 Nginx 同域反向代理
-- UI 走 https://<domain>/
-- Gateway 走 wss://<domain>/gateway/
-- 如启用 Studio，走 https://<domain>/studio
+
+- Nginx 监听 `127.0.0.1:8080`
+- `/` 提供前端 `dist/`
+- `/gateway/` 转发到 `127.0.0.1:18789`
+- `/studio/` 转发到 `127.0.0.1:19000`
+- 正确处理 WebSocket Upgrade
+
+### 5. 准备 Cloudflare Tunnel
+
+优先使用：
+
+- `deploy/linux/cloudflare/config.yml.example`
+
+要求：
+
+- 使用用户给定的 tunnel UUID
+- hostname 指向用户域名
+- service 指向 `http://127.0.0.1:8080`
+- 提供 `cloudflared` 安装、登录、创建 tunnel、绑定 hostname、安装服务的完整命令
+
+### 6. 端到端验证
+
+按以下顺序验证：
+
+1. 本机验证 Gateway 端口
+2. 本机验证 Studio 健康检查
+3. 本机验证 Nginx
+4. 本机验证 cloudflared 服务
+5. Windows 浏览器打开 `https://YOUR_DOMAIN/`
+6. 在 Settings 中验证 Gateway 连接
+7. 如需 token，填写 `Gateway Token`
+8. 如需设备批准，完成批准后重试
+9. 如启用 Studio，验证 `https://YOUR_DOMAIN/studio`
+
+## 六、必须输出的结果格式
+
+OpenClaw agent 最终必须输出下面这些部分：
+
+### A. 部署摘要
+
+明确说明：
+
+- UI 部署在哪个目录
+- Gateway 在哪里运行
+- Studio 在哪里运行
+- Nginx 监听地址
+- Cloudflare Tunnel 转发目标
+- 浏览器最终访问地址
+
+### B. 已自动完成内容
+
+例如：
+
+- 修改了哪些仓库文件
+- 生成了哪些构建产物
+- 填好了哪些配置模板
+
+### C. 需要用户手动完成的内容
+
+至少要单独列出：
+
+- Cloudflare 登录或授权
+- tunnel 创建或凭据文件放置
+- DNS hostname 绑定
+- systemctl enable / restart
+- Gateway 首次 token 输入
+- 服务端设备批准
+
+### D. 验证步骤
+
+给出最短可执行验证流程。
+
+### E. 排障建议
+
+至少覆盖：
+
+- 页面能打开但 Gateway 连接失败
+- Tunnel 正常但 `/gateway/` WebSocket 失败
+- Studio iframe 无法加载
+- 首次连通后后续 token 失效
+
+## 七、禁止事项
+
+不要默认使用这些做法：
+
+- 直接公开 Gateway 原始端口给公网
+- 直接公开 Studio 原始端口给公网
+- 把浏览器远程访问建立在 `ws://` 裸连接上
+- 用“只给一堆命令，不改仓库文件”的方式交付
+- 忽略 Cloudflare Tunnel 需要的配置文件和服务说明
+
+## 八、给 OpenClaw 的推荐提示词
+
+把下面这段提示词直接交给 OpenClaw 使用：
+
+```text
+使用当前仓库根目录下的 ./SKILL.md 作为部署技能，完成一次“Linux 同机部署 + Cloudflare Tunnel 公网访问”的完整交付。
+
+目标场景：
+- OpenClaw Center 部署到我的 Linux 服务器
+- OpenClaw Gateway 也部署在同一台 Linux 服务器
+- 如果需要，Studio 也部署在同一台 Linux 服务器
+- 我通过挂在 Cloudflare 上的域名，从 Windows PC 的浏览器公网访问
+- 页面必须能像 OpenClaw 官方 WebUI 一样正常连接 Gateway
+
+固定要求：
 - 前端按 remote 模式构建
-- 需要把仓库内该改的文件都改好
-- 如果你无法直接访问服务器，也要把仓库侧准备完整，并给我精确的手动命令
-- 最后必须单独列出：
-  1. 你已经自动完成的内容
-  2. 需要我手动处理的内容
-  3. 可能遇到的问题与排查建议
+- UI 使用 https://<我的域名>/
+- Gateway 使用 wss://<我的域名>/gateway/
+- Studio 使用 https://<我的域名>/studio
+- 不要直接暴露 Gateway 或 Studio 原始端口到公网
+- 必须通过 Cloudflare Tunnel 转发到本机 Nginx
+- Nginx 只监听 127.0.0.1
+
+你必须完成的内容：
+- 检查并修改仓库里的部署配置，使其适合这套架构
+- 生成或更新适合 Cloudflare Tunnel 的 Nginx 配置
+- 生成或更新 cloudflared 的配置模板
+- 准备 Studio 的 systemd 配置
+- 构建前端
+- 如果你无法直接登录我的服务器，也要把仓库侧内容全部准备好，并给我精确到文件路径和命令级别的手动部署步骤
+
+输出时必须分成这些部分：
+1. 部署摘要
+2. 已自动完成内容
+3. 需要我手动完成的内容
+4. 验证步骤
+5. 排障建议
+
+重点检查项：
+- Gateway WebSocket 反代是否正确
+- Cloudflare Tunnel 到 Nginx 的路径是否正确
+- Settings 中默认远程地址是否与域名一致
+- 首次连接的 Gateway Token 和设备批准流程是否说明清楚
 ```
