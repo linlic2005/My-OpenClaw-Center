@@ -69,9 +69,8 @@ Windows Browser
 执行前优先读取并复用这些文件：
 
 - `README.md`
-- `README.zh-CN.md`
 - `项目说明文档.md`
-- `deploy/linux/README.zh-CN.md`
+- `deploy/linux/README.md`
 - `deploy/linux/nginx/openclaw-center.conf`
 - `deploy/linux/nginx/openclaw-center-cloudflare-tunnel.conf`
 - `deploy/linux/cloudflare/config.yml.example`

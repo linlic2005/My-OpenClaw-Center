@@ -1,61 +1,59 @@
 # OpenClaw Center
 
-OpenClaw Center is a publishable OpenClaw client built with React, TypeScript, and Tauri 2.
+OpenClaw Center 是一个可发布到 GitHub 的 OpenClaw 客户端，技术栈为 React、TypeScript 与 Tauri 2。
 
-This version refactors the project into:
+这次重构后的目标很明确：
 
-- a `ClawX`-inspired command center shell
-- a `Star-Office-UI`-inspired workspace scene
-- the existing real OpenClaw Gateway handshake and `agents.list` integration
+- 用 `ClawX` 风格重做主界面和产品壳层
+- 融合 `Star-Office-UI` 风格的工作室场景可视化
+- 保留并强化现有 OpenClaw Gateway 真连接能力
 
-The goal is simple: connect to a local or remote OpenClaw Gateway, show agent information in a modern control surface, and keep the project clean enough to ship as a GitHub repository.
+最终效果是：项目既能像官方 WebUI 一样连接本地或远端 OpenClaw Gateway、读取 Agent 信息，又具备更完整的主控台与工作室体验。
 
-## Highlights
+## 当前亮点
 
-- Official Gateway connect flow
-  Uses `connect.challenge` + `connect`, shared-token auth, paired-device token reuse, reconnect, and heartbeat.
-- Agent-first overview
-  The new home screen is a mission-control dashboard that surfaces Gateway status, agent roster, deployment mode, queue state, and workspace telemetry.
-- Star Office workspace scene
-  The Studio area can embed a live Flask Studio page, or fall back to a built-in Star Office style scene view.
-- Existing capability modules kept intact
-  Chat, Kanban, Config Viewer, Studio, and Settings still work as separate modules under the new shell.
-- GitHub-ready project structure
-  Includes `.gitignore`, `LICENSE`, publishable package metadata, environment examples, and updated docs.
+- 官方式 Gateway 握手
+  已接入 `connect.challenge` + `connect`、共享 Token、配对设备 Token、心跳与重连。
+- Agent 中心化首页
+  新首页会统一展示 Gateway 状态、Agent 名册、部署模式、离线队列和工作室态势。
+- Star Office 工作室场景
+  `Studio` 页面可以优先嵌入 Flask 工作室页面；不可用时，自动回退到内置 Star Office 风格场景视图。
+- 保留原有功能模块
+  `Chat`、`Kanban`、`Configs`、`Studio`、`Settings` 仍然是独立模块，但统一纳入新的主控台壳层。
+- 仓库发布基础已补齐
+  已加入 `.gitignore`、`LICENSE`、可发布的 `package.json` 元信息和新的仓库说明文档。
 
-## Design Direction
+## 设计来源
 
-This project does not copy upstream repositories verbatim.
-
-It combines ideas from:
+本项目不是直接复制上游仓库，而是做了面向 OpenClaw 的整合：
 
 - [ValueCell-ai/ClawX](https://github.com/ValueCell-ai/ClawX)
 - [ringhyacinth/Star-Office-UI](https://github.com/ringhyacinth/Star-Office-UI)
 
-The result is an OpenClaw-focused integration layer with:
+整合原则是：
 
-- a ClawX-style product shell and control flow
-- a Star Office style visual workspace
-- OpenClaw-specific Gateway connectivity and module logic
+- 用 ClawX 的产品壳层思路做主控台
+- 用 Star Office 的场景化视觉表达 Agent 工作状态
+- 用 OpenClaw 自己的 Gateway 协议与功能模块做底层能力
 
-## Core Modules
+## 模块说明
 
 - `Overview`
-  Mission-control dashboard for Gateway, agents, workspace scene, and quick entry into feature modules.
+  新的任务总览页，统一查看 Gateway、Agent、工作室场景和模块入口。
 - `Chat`
-  Gateway-backed chat sessions with history loading, quoted replies, mentions, and config-file references.
+  基于 Gateway 的会话、历史消息、引用回复、Agent 提及和配置附件引用。
 - `Kanban`
-  Gateway-backed board loading, card create/edit/move/delete, and conflict handling.
+  基于 Gateway 的任务看板、卡片编辑、拖转逻辑和冲突处理。
 - `Configs`
-  Focused viewer for `USER.md`, `SOUL.md`, and `MEMORY.md`.
+  面向 `USER.md`、`SOUL.md`、`MEMORY.md` 的配置查看器。
 - `Studio`
-  Live Studio iframe when available, local Star Office scene fallback otherwise.
+  优先显示实时 Flask Studio iframe，失败时自动回退到内置工作室场景。
 - `Settings`
-  Connection testing, deployment mode switching, theme/runtime settings, diagnostics, logs, and queue inspection.
+  管理连接测试、部署模式、主题、运行参数、诊断日志与离线队列。
 
-## Environment
+## 环境变量
 
-Copy `.env.example` to `.env` and adjust as needed.
+复制 `.env.example` 为 `.env` 后修改：
 
 ```env
 VITE_DEFAULT_DEPLOYMENT_MODE=local
@@ -67,71 +65,50 @@ VITE_APP_NAME=OpenClaw Center
 VITE_APP_VERSION=1.0.0
 ```
 
-## Local Development
+## 本地开发
 
-Requirements:
+依赖要求：
 
 - Node.js 18+
 - Rust 1.70+
-- Tauri 2 toolchain
+- Tauri 2 工具链
 
-Install:
+安装依赖：
 
 ```bash
 npm install
 ```
 
-Run web mode:
+启动 Web 模式：
 
 ```bash
 npm run dev
 ```
 
-Run Tauri mode:
+启动 Tauri 模式：
 
 ```bash
 npm run tauri dev
 ```
 
-Build:
+构建：
 
 ```bash
 npm run build
 ```
 
-Test:
+测试：
 
 ```bash
 npm run test
 ```
 
-## Gateway Notes
+## Gateway 连接说明
 
-- The client uses the official Gateway-style handshake.
-- `Gateway Token` is intended for first-time connection or protected environments.
-- After a successful pair, the issued paired-device token is stored locally and reused on reconnect.
-- `agents.list` is used to populate the dashboard and Settings agent roster.
-
-## Suggested Repository Layout
-
-- `src/`
-  React app, service layer, stores, and UI modules.
-- `src-tauri/`
-  Tauri host application.
-- `studio/`
-  Optional Flask-based workspace service.
-- `deploy/`
-  Deployment references for Linux/systemd/nginx.
-
-## Publishing Checklist
-
-Before pushing to GitHub:
-
-1. Update `README.md` and `README.zh-CN.md` with your final repository URL and screenshots.
-2. Fill `.env.example` with the deployment presets you want others to start from.
-3. Confirm `npm run build` and `npm run test` succeed.
-4. Remove any local-only secrets from `.env`.
-5. Commit the new shell, workspace scene, and docs together so the repo reflects the new product direction.
+- 客户端已按官方式流程完成 Gateway 握手。
+- `Gateway Token` 主要用于首次连接或受保护环境。
+- 首次配对成功后，服务端返回的设备 Token 会在本地持久化，并用于后续重连。
+- 首页和设置页中的 Agent 信息来自 `agents.list`。
 
 ## License
 
