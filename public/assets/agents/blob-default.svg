@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <radialGradient id="grad1" cx="50%" cy="50%" r="50%" fx="30%" fy="30%">
+      <stop offset="0%" style="stop-color:#38bdf8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0284c7;stop-opacity:1" />
+    </radialGradient>
+  </defs>
+  <path d="M 50 15 C 75 15 85 40 85 65 C 85 85 70 90 50 90 C 30 90 15 85 15 65 C 15 40 25 15 50 15 Z" fill="url(#grad1)" />
+  <!-- Eyes -->
+  <circle cx="35" cy="45" r="5" fill="white" />
+  <circle cx="65" cy="45" r="5" fill="white" />
+  <circle cx="35" cy="45" r="2" fill="#0f172a" />
+  <circle cx="65" cy="45" r="2" fill="#0f172a" />
+  <!-- Smile -->
+  <path d="M 40 60 Q 50 70 60 60" stroke="white" stroke-width="3" fill="transparent" stroke-linecap="round" />
+</svg>

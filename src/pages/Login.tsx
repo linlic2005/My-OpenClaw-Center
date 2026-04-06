@@ -2,22 +2,51 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot, Shield, Key, ArrowRight, Github, Chrome, MessageCircle } from 'lucide-react';
 import { useAppStore } from '@/stores/useAppStore';
+import { useNotificationStore } from '@/stores/useNotificationStore';
 import { translations } from '@/stores/i18n';
+import { apiClient, setTokens } from '@/services/api-client';
 
 export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
   const { language } = useAppStore();
   const t = (key: string) => translations[language][key] || key;
+  const { addNotification } = useNotificationStore();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    await new Promise(r => setTimeout(r, 1200));
-    setIsLoading(false);
-    navigate('/dashboard');
+    setError('');
+    try {
+      const res = await apiClient.post('/auth/login', { username, password });
+      const { tokens } = res.data.data;
+      setTokens(tokens.accessToken, tokens.refreshToken);
+      navigate('/dashboard');
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Login failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fillAdminCredentials = () => {
+    setUsername('admin');
+    setPassword('admin123');
+    addNotification('Default admin credentials filled.', 'info');
+  };
+
+  const clearForm = () => {
+    setUsername('');
+    setPassword('');
+    setError('');
+  };
+
+  const focusPassword = () => {
+    const passwordInput = document.querySelector<HTMLInputElement>('input[type="password"]');
+    passwordInput?.focus();
   };
 
   return (
@@ -38,6 +67,11 @@ export default function Login() {
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5">
+            {error && (
+              <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-sm px-4 py-3 rounded-2xl border border-red-200 dark:border-red-500/20">
+                {error}
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-[11px] font-black uppercase text-gray-400 tracking-wider ml-1">{t('identity')}</label>
               <div className="relative group">
@@ -97,13 +131,13 @@ export default function Login() {
           </form>
 
           <div className="mt-10 pt-8 border-t border-gray-100 dark:border-gray-800 flex justify-center gap-6">
-             <button className="text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+             <button onClick={fillAdminCredentials} className="text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors" title="Fill default admin credentials">
                <Github size={20} />
              </button>
-             <button className="text-gray-400 hover:text-blue-500 transition-colors">
+             <button onClick={focusPassword} className="text-gray-400 hover:text-blue-500 transition-colors" title="Focus password field">
                <Chrome size={20} />
              </button>
-             <button className="text-gray-400 hover:text-primary transition-colors">
+             <button onClick={clearForm} className="text-gray-400 hover:text-primary transition-colors" title="Clear form">
                <MessageCircle size={20} />
              </button>
           </div>

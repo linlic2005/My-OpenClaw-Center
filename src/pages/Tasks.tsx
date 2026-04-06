@@ -1,7 +1,12 @@
 import { Clock, Play, Pause, Trash2, Plus, CheckCircle2, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAppStore } from '@/stores/useAppStore';
+import { useNotificationStore } from '@/stores/useNotificationStore';
 import { translations } from '@/stores/i18n';
+import { useState, useEffect } from 'react';
+import { apiClient } from '@/services/api-client';
+import { Modal } from '@/components/ui/Modal';
+import { useAgentStore } from '@/stores/useAgentStore';
 
 interface Task {
   id: string;
@@ -14,15 +19,64 @@ interface Task {
   type: 'cron' | 'once';
 }
 
-const MOCK_TASKS: Task[] = [
-  { id: 't1', name: 'Daily Social Media Summary', schedule: '0 9 * * *', agentName: 'Social Agent', lastRun: '2024-03-20 09:00', nextRun: '2024-03-21 09:00', status: 'running', type: 'cron' },
-  { id: 't2', name: 'Weekly System Health Audit', schedule: '0 0 * * 0', agentName: 'Security Auditor', lastRun: '2024-03-17 00:00', nextRun: '2024-03-24 00:00', status: 'paused', type: 'cron' },
-  { id: 't3', name: 'Market Data Sync', schedule: '*/30 * * * *', agentName: 'Analyst Pro', lastRun: '2024-03-20 14:30', nextRun: '2024-03-20 15:00', status: 'failed', type: 'cron' },
-];
-
 export default function Tasks() {
   const { language } = useAppStore();
   const t = (key: string) => translations[language][key] || key;
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [formData, setFormData] = useState({ name: '', schedule: '', agentId: '', type: 'cron' as 'cron' | 'once' });
+  const { addNotification } = useNotificationStore();
+  const { agents, fetchAgents } = useAgentStore();
+
+  useEffect(() => {
+    apiClient.get('/tasks').then(res => setTasks(res.data.data)).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    void fetchAgents();
+  }, [fetchAgents]);
+
+  const handleToggleTask = async (task: Task) => {
+    const enabled = task.status !== 'running';
+
+    try {
+      await apiClient.post(`/tasks/${task.id}/toggle`, { enabled });
+      setTasks((state) => state.map((item) => (
+        item.id === task.id
+          ? { ...item, status: enabled ? 'running' : 'paused' }
+          : item
+      )));
+      addNotification(enabled ? `${task.name} resumed.` : `${task.name} paused.`);
+    } catch (error) {
+      console.error('Failed to toggle task:', error);
+      addNotification(`Failed to update ${task.name}.`, 'error');
+    }
+  };
+
+  const handleDeleteTask = async (task: Task) => {
+    try {
+      await apiClient.delete(`/tasks/${task.id}`);
+      setTasks((state) => state.filter((item) => item.id !== task.id));
+      addNotification(`${task.name} deleted.`);
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+      addNotification(`Failed to delete ${task.name}.`, 'error');
+    }
+  };
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await apiClient.post('/tasks', formData);
+      setTasks((state) => [res.data.data, ...state]);
+      setIsCreateOpen(false);
+      setFormData({ name: '', schedule: '', agentId: '', type: 'cron' });
+      addNotification('Task created.');
+    } catch (error) {
+      console.error('Failed to create task:', error);
+      addNotification('Failed to create task.', 'error');
+    }
+  };
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -31,7 +85,10 @@ export default function Tasks() {
           <h1 className="text-3xl font-bold tracking-tight">{t('tasks')}</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1">{t('tasks_desc')}</p>
         </div>
-        <button className="bg-primary text-white hover:bg-primary/90 px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-primary/20 transition-all active:scale-95 flex items-center gap-2 text-sm">
+        <button
+          onClick={() => setIsCreateOpen(true)}
+          className="bg-primary text-white hover:bg-primary/90 px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-primary/20 transition-all active:scale-95 flex items-center gap-2 text-sm"
+        >
           <Plus size={18} /> {t('create_task')}
         </button>
       </div>
@@ -50,7 +107,7 @@ export default function Tasks() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800/50">
-              {MOCK_TASKS.map((task) => (
+              {tasks.map((task) => (
                 <tr key={task.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/30 transition-colors">
                   <td className="px-8 py-5">
                     <div className="flex items-center gap-3">
@@ -81,10 +138,10 @@ export default function Tasks() {
                   </td>
                   <td className="px-8 py-5 text-right">
                     <div className="flex items-center justify-end gap-2">
-                       <button className="p-2 text-gray-400 hover:text-primary transition-all">
+                       <button onClick={() => void handleToggleTask(task)} className="p-2 text-gray-400 hover:text-primary transition-all">
                          {task.status === 'paused' ? <Play size={18} /> : <Pause size={18} />}
                        </button>
-                       <button className="p-2 text-gray-400 hover:text-red-500 transition-all">
+                       <button onClick={() => void handleDeleteTask(task)} className="p-2 text-gray-400 hover:text-red-500 transition-all">
                          <Trash2 size={18} />
                        </button>
                     </div>
@@ -95,6 +152,24 @@ export default function Tasks() {
           </table>
         </div>
       </div>
+
+      <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title={t('create_task')}>
+        <form onSubmit={handleCreateTask} className="space-y-4">
+          <input required value={formData.name} onChange={(e) => setFormData((state) => ({ ...state, name: e.target.value }))} placeholder="Task name" className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3 text-sm outline-none" />
+          <input required value={formData.schedule} onChange={(e) => setFormData((state) => ({ ...state, schedule: e.target.value }))} placeholder="0 9 * * *" className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3 text-sm outline-none font-mono" />
+          <select required value={formData.agentId} onChange={(e) => setFormData((state) => ({ ...state, agentId: e.target.value }))} className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3 text-sm outline-none">
+            <option value="">Select agent</option>
+            {agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>{agent.name}</option>
+            ))}
+          </select>
+          <select value={formData.type} onChange={(e) => setFormData((state) => ({ ...state, type: e.target.value as 'cron' | 'once' }))} className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3 text-sm outline-none">
+            <option value="cron">cron</option>
+            <option value="once">once</option>
+          </select>
+          <button className="w-full bg-primary text-white py-3 rounded-xl font-semibold">Create Task</button>
+        </form>
+      </Modal>
     </div>
   );
 }

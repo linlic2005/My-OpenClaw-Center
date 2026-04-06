@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { LogEntry } from '@/types';
 import { useAppStore } from '@/stores/useAppStore';
 import { translations } from '@/stores/i18n';
+import { realtimeClient } from '@/services/realtime';
 
 const LOG_LEVEL_COLORS = {
   info: 'text-blue-500',
@@ -33,35 +34,15 @@ export default function Logs() {
   const { language } = useAppStore();
   const t = (key: string) => translations[language][key] || key;
 
-  // Simulated log generation
+  // SSE log stream from backend
   useEffect(() => {
     if (isPaused) return;
 
-    const interval = setInterval(() => {
-      const levels: LogEntry['level'][] = ['info', 'info', 'info', 'warn', 'debug', 'error'];
-      const modules = ['GATEWAY', 'AGENT_RUNNER', 'AUTH', 'CHANNEL_DISCORD', 'DATABASE'];
-      const messages = [
-        'Incoming request from 192.168.1.45',
-        'Agent [Customer Support] successfully initialized',
-        'Token validation successful for user admin',
-        'Connection heartbeat sent to Discord Gateway',
-        'Database query took 124ms',
-        'Failed to process message chunk for session s_2841',
-        'Garbage collection completed: 42MB freed',
-      ];
+    const unsubscribe = realtimeClient.subscribeLogs((log: LogEntry) => {
+      setLogs(prev => [...prev.slice(-100), log]);
+    });
 
-      const newLog: LogEntry = {
-        id: Math.random().toString(36).substring(7),
-        timestamp: new Date().toISOString(),
-        level: levels[Math.floor(Math.random() * levels.length)],
-        module: modules[Math.floor(Math.random() * modules.length)],
-        message: messages[Math.floor(Math.random() * messages.length)],
-      };
-
-      setLogs(prev => [...prev.slice(-100), newLog]);
-    }, 2000);
-
-    return () => clearInterval(interval);
+    return unsubscribe;
   }, [isPaused]);
 
   useEffect(() => {

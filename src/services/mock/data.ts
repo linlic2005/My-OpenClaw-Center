@@ -8,6 +8,7 @@ export const MOCK_AGENTS: Agent[] = [
     status: 'active',
     description: 'Handles general customer inquiries and support tickets.',
     lastActive: new Date().toISOString(),
+    roomId: 'public',
   },
   {
     id: 'agent-2',
@@ -16,6 +17,7 @@ export const MOCK_AGENTS: Agent[] = [
     status: 'idle',
     description: 'Specialized in SQL generation and data visualization.',
     lastActive: new Date(Date.now() - 3600000).toISOString(),
+    roomId: 'public',
   },
   {
     id: 'agent-3',
@@ -24,6 +26,7 @@ export const MOCK_AGENTS: Agent[] = [
     status: 'offline',
     description: 'Expert in system design and code review.',
     lastActive: new Date(Date.now() - 86400000).toISOString(),
+    roomId: 'agent-3-office',
   },
 ];
 

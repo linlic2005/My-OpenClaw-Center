@@ -5,28 +5,60 @@ import { translations } from '@/stores/i18n';
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
+import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
+import jsx from 'react-syntax-highlighter/dist/esm/languages/prism/jsx';
+import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown';
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python';
+import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx';
+import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
 import { Send, Plus, Search, User, Bot, Loader2, MessageSquare } from 'lucide-react';
 import { clsx } from 'clsx';
 
+SyntaxHighlighter.registerLanguage('bash', bash);
+SyntaxHighlighter.registerLanguage('sh', bash);
+SyntaxHighlighter.registerLanguage('javascript', javascript);
+SyntaxHighlighter.registerLanguage('js', javascript);
+SyntaxHighlighter.registerLanguage('json', json);
+SyntaxHighlighter.registerLanguage('jsx', jsx);
+SyntaxHighlighter.registerLanguage('markdown', markdown);
+SyntaxHighlighter.registerLanguage('md', markdown);
+SyntaxHighlighter.registerLanguage('python', python);
+SyntaxHighlighter.registerLanguage('py', python);
+SyntaxHighlighter.registerLanguage('typescript', typescript);
+SyntaxHighlighter.registerLanguage('ts', typescript);
+SyntaxHighlighter.registerLanguage('tsx', tsx);
+
 export default function Chat() {
-  const { agents } = useAgentStore();
+  const { agents, fetchAgents } = useAgentStore();
   const { language } = useAppStore();
   const t = (key: string) => translations[language][key] || key;
-  
-  const { 
-    sessions, 
-    activeSessionId, 
-    setActiveSession, 
-    sendMessage, 
-    isStreaming, 
+
+  const {
+    sessions,
+    activeSessionId,
+    setActiveSession,
+    sendMessage,
+    isStreaming,
     currentStreamingText,
-    createSession 
+    createSession,
+    fetchSessions,
   } = useChatStore();
-  
+
   const [inputText, setInputText] = useState('');
+  const [selectedAgentId, setSelectedAgentId] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { void fetchAgents(); void fetchSessions(); }, [fetchAgents, fetchSessions]);
+
+  useEffect(() => {
+    if (!selectedAgentId && agents.length > 0) {
+      setSelectedAgentId(agents[0].id);
+    }
+  }, [agents, selectedAgentId]);
   
   const activeSession = sessions.find(s => s.id === activeSessionId);
   const activeAgent = agents.find(a => a.id === activeSession?.agentId);
@@ -45,13 +77,30 @@ export default function Chat() {
     await sendMessage(text);
   };
 
+  const handleCreateSession = async () => {
+    if (!selectedAgentId) return;
+    await createSession(selectedAgentId);
+  };
+
   return (
     <div className="flex h-full bg-white dark:bg-black overflow-hidden">
       {/* Session Sidebar */}
       <div className="w-80 border-r border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/30 flex flex-col">
         <div className="p-4 border-b border-gray-200 dark:border-gray-800 space-y-4">
+          <select
+            value={selectedAgentId}
+            onChange={(e) => setSelectedAgentId(e.target.value)}
+            className="w-full bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+          >
+            {agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {agent.name} ({agent.model})
+              </option>
+            ))}
+          </select>
           <button 
-            onClick={() => createSession(agents[0].id)}
+            onClick={() => void handleCreateSession()}
+            disabled={!selectedAgentId}
             className="w-full bg-primary text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-semibold shadow-sm hover:bg-primary/90 transition-all active:scale-95"
           >
             <Plus size={18} /> {t('new_chat')}
@@ -102,26 +151,26 @@ export default function Chat() {
       <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-black">
         {activeSession ? (
           <>
-            <div className="h-16 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-6 bg-white/80 dark:black/80 backdrop-blur-md z-10">
+            <div className="h-16 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-6 bg-white/80 dark:bg-gray-950/80 backdrop-blur-md z-10">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center ring-1 ring-primary/20">
                   <Bot size={20} />
                 </div>
                 <div>
-                  <div className="font-bold text-sm tracking-tight">{activeAgent?.name}</div>
+                  <div className="font-bold text-sm tracking-tight text-gray-900 dark:text-gray-100">{activeAgent?.name}</div>
                   <div className="flex items-center gap-1.5 text-[10px]">
                     <span className={clsx(
                       "w-1.5 h-1.5 rounded-full",
                       activeAgent?.status === 'active' ? "bg-green-500 animate-pulse" : "bg-gray-400"
                     )}></span>
-                    <span className="text-gray-500 uppercase tracking-widest font-semibold">{t(activeAgent?.status || 'idle')}</span>
+                    <span className="text-gray-500 dark:text-gray-300 uppercase tracking-widest font-semibold">{t(activeAgent?.status || 'idle')}</span>
                   </div>
                 </div>
               </div>
             </div>
             
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-8 scroll-smooth">
-              {activeSession.messages.map((msg) => (
+              {(activeSession.messages || []).map((msg) => (
                 <div key={msg.id} className={clsx(
                   "flex gap-4",
                   msg.role === 'user' ? "flex-row-reverse" : "flex-row"
@@ -143,7 +192,7 @@ export default function Chat() {
                     <ReactMarkdown 
                       remarkPlugins={[remarkGfm]}
                       components={{
-                        code({ node, inline, className, children, ...props }: any) {
+                        code({ inline, className, children, ...props }: any) {
                           const match = /language-(\w+)/.exec(className || '')
                           return !inline && match ? (
                             <SyntaxHighlighter
@@ -225,7 +274,8 @@ export default function Chat() {
              </div>
              <h3 className="text-xl font-bold tracking-tight mb-2">{t('select_session')}</h3>
              <button 
-               onClick={() => createSession(agents[0].id)}
+               onClick={() => void handleCreateSession()}
+               disabled={!selectedAgentId}
                className="mt-6 bg-primary text-white px-6 py-2.5 rounded-xl font-semibold shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95"
              >
                {t('new_chat')}

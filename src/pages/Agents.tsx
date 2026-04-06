@@ -1,36 +1,127 @@
 import { useAgentStore } from '@/stores/useAgentStore';
 import { useNotificationStore } from '@/stores/useNotificationStore';
+import { useChatStore } from '@/stores/useChatStore';
 import { useAppStore } from '@/stores/useAppStore';
 import { translations } from '@/stores/i18n';
-import { Search, Plus, Filter, MoreHorizontal, Edit, Trash2 } from 'lucide-react';
+import { Search, Plus, Filter, MoreHorizontal, Edit, Trash2, MessageSquare } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
+import { useNavigate } from 'react-router-dom';
+import { apiClient } from '@/services/api-client';
 
 export default function Agents() {
-  const { agents, isLoading } = useAgentStore();
+  const { agents, isLoading, fetchAgents } = useAgentStore();
+  const { sessions, setActiveSession, createSession } = useChatStore();
   const { language } = useAppStore();
   const t = (key: string) => translations[language][key] || key;
   const { addNotification } = useNotificationStore();
+  const navigate = useNavigate();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'idle' | 'error' | 'offline'>('all');
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    model: 'gpt-4o',
+    description: '',
+  });
+
+  useEffect(() => { fetchAgents(); }, [fetchAgents]);
 
   const filteredAgents = useMemo(() => {
-    return agents.filter(a => 
-      a.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      a.model.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [agents, searchQuery]);
+    return agents.filter(a => {
+      const matchesSearch =
+        a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        a.model.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = statusFilter === 'all' || a.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [agents, searchQuery, statusFilter]);
 
   const handleCreateAgent = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    await new Promise(r => setTimeout(r, 1000));
-    setIsSubmitting(false);
-    setIsModalOpen(false);
-    addNotification('New agent successfully deployed to Gateway.');
+    try {
+      if (editingAgentId) {
+        await apiClient.patch(`/agents/${editingAgentId}`, formData);
+        addNotification('Agent updated.');
+      } else {
+        await apiClient.post('/agents', formData);
+        addNotification('New agent successfully deployed to Gateway.');
+      }
+      await fetchAgents();
+      setIsModalOpen(false);
+      setEditingAgentId(null);
+      setFormData({ name: '', model: 'gpt-4o', description: '' });
+    } catch (error) {
+      console.error('Failed to save agent:', error);
+      addNotification('Failed to save agent.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenChat = (agentId: string) => {
+    const existingSession = sessions.find((session) => session.agentId === agentId);
+    if (existingSession) {
+      setActiveSession(existingSession.id);
+      navigate('/chat');
+    } else {
+      void createSession(agentId).then((sessionId) => {
+        if (sessionId) {
+          navigate('/chat');
+        }
+      });
+    }
+  };
+
+  const handleDeleteAgent = async (agentId: string, agentName: string) => {
+    try {
+      await apiClient.delete(`/agents/${agentId}`);
+      await fetchAgents();
+      addNotification(`${agentName} deleted.`);
+    } catch (error) {
+      console.error('Failed to delete agent:', error);
+      addNotification(`Failed to delete ${agentName}.`, 'error');
+    }
+  };
+
+  const handleRestartAgent = async (agentId: string, agentName: string) => {
+    try {
+      await apiClient.post(`/agents/${agentId}/restart`);
+      await fetchAgents();
+      addNotification(`${agentName} restarted.`);
+    } catch (error) {
+      console.error('Failed to restart agent:', error);
+      addNotification(`Failed to restart ${agentName}.`, 'error');
+    }
+  };
+
+  const handleOpenCreateModal = () => {
+    setEditingAgentId(null);
+    setFormData({ name: '', model: 'gpt-4o', description: '' });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (agentId: string) => {
+    const agent = agents.find((item) => item.id === agentId);
+    if (!agent) return;
+    setEditingAgentId(agent.id);
+    setFormData({
+      name: agent.name,
+      model: agent.model,
+      description: agent.description || '',
+    });
+    setIsModalOpen(true);
+  };
+
+  const cycleStatusFilter = () => {
+    const order: Array<typeof statusFilter> = ['all', 'active', 'idle', 'error', 'offline'];
+    const currentIndex = order.indexOf(statusFilter);
+    setStatusFilter(order[(currentIndex + 1) % order.length]);
   };
 
   return (
@@ -41,7 +132,7 @@ export default function Agents() {
           <p className="text-gray-500 dark:text-gray-400 mt-1">{t('agents_desc')}</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={handleOpenCreateModal}
           className="bg-primary text-white hover:bg-primary/90 px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-primary/20 transition-all active:scale-95 flex items-center gap-2 text-sm"
         >
           <Plus size={18} /> {t('create_agent')}
@@ -60,8 +151,8 @@ export default function Agents() {
           />
         </div>
         <div className="flex gap-2">
-           <button className="flex-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm">
-             <Filter size={16} /> {t('status')}: All
+           <button onClick={cycleStatusFilter} className="flex-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm">
+             <Filter size={16} /> {t('status')}: {statusFilter}
            </button>
         </div>
       </div>
@@ -120,13 +211,20 @@ export default function Agents() {
                   </td>
                   <td className="px-8 py-5 text-right">
                     <div className="flex items-center justify-end gap-2">
-                       <button className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all" title={t('edit')}>
+                       <button
+                         onClick={() => handleOpenChat(agent.id)}
+                         className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
+                         title={t('chat')}
+                       >
+                         <MessageSquare size={16} />
+                       </button>
+                       <button onClick={() => handleOpenEditModal(agent.id)} className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all" title={t('edit')}>
                          <Edit size={16} />
                        </button>
-                       <button className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title={t('delete')}>
+                       <button onClick={() => void handleDeleteAgent(agent.id, agent.name)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title={t('delete')}>
                          <Trash2 size={16} />
                        </button>
-                       <button className="p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg transition-all">
+                       <button onClick={() => void handleRestartAgent(agent.id, agent.name)} className="p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg transition-all" title="Restart">
                          <MoreHorizontal size={18} />
                        </button>
                     </div>
@@ -149,17 +247,17 @@ export default function Agents() {
       <Modal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)}
-        title={t('create_agent')}
+        title={editingAgentId ? t('edit') : t('create_agent')}
         description={t('agents_desc')}
       >
         <form onSubmit={handleCreateAgent} className="space-y-5">
            <div className="space-y-2">
               <label className="text-[11px] font-black uppercase text-gray-400 tracking-wider">Agent Name</label>
-              <input required type="text" placeholder="e.g. Research Analyst" className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all" />
+              <input required value={formData.name} onChange={(e) => setFormData((state) => ({ ...state, name: e.target.value }))} type="text" placeholder="e.g. Research Analyst" className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all" />
            </div>
            <div className="space-y-2">
               <label className="text-[11px] font-black uppercase text-gray-400 tracking-wider">{t('model_engine')}</label>
-              <select className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl px-4 py-3 text-sm outline-none">
+              <select value={formData.model} onChange={(e) => setFormData((state) => ({ ...state, model: e.target.value }))} className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl px-4 py-3 text-sm outline-none">
                 <option>gpt-4o</option>
                 <option>gpt-4-turbo</option>
                 <option>claude-3-5-sonnet</option>
@@ -168,12 +266,12 @@ export default function Agents() {
            </div>
            <div className="space-y-2">
               <label className="text-[11px] font-black uppercase text-gray-400 tracking-wider">Description</label>
-              <textarea rows={3} placeholder="..." className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl px-4 py-3 text-sm outline-none resize-none" />
+              <textarea value={formData.description} onChange={(e) => setFormData((state) => ({ ...state, description: e.target.value }))} rows={3} placeholder="..." className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl px-4 py-3 text-sm outline-none resize-none" />
            </div>
            <div className="pt-4 flex gap-3">
               <button 
                 type="button"
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => { setIsModalOpen(false); setEditingAgentId(null); }}
                 className="flex-1 px-6 py-3 rounded-2xl font-bold text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
               >
                 {t('cancel')}

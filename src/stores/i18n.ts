@@ -103,6 +103,9 @@ export const translations: Record<Language, Record<string, string>> = {
     avg_latency: 'Avg Latency',
     gateway_cpu: 'Gateway CPU',
     recent_activity: 'Recent Activity',
+    total_tokens: 'Total Tokens',
+    token_usage_ranking: 'Token Usage Ranking',
+    tokens: 'Tokens',
   },
   zh: {
     // Sidebar & Common
@@ -206,6 +209,9 @@ export const translations: Record<Language, Record<string, string>> = {
     avg_latency: '平均延迟',
     gateway_cpu: '网关 CPU',
     recent_activity: '最近活动',
+    total_tokens: '总 Token 消耗',
+    token_usage_ranking: '智能体 Token 消耗排行',
+    tokens: '个 Token',
   },
   jp: {
     // Sidebar & Common
@@ -309,5 +315,8 @@ export const translations: Record<Language, Record<string, string>> = {
     avg_latency: '平均レイテンシ',
     gateway_cpu: 'ゲートウェイ CPU',
     recent_activity: '最近のアクティビティ',
+    total_tokens: '総トークン消費量',
+    token_usage_ranking: 'トークン使用量ランキング',
+    tokens: 'トークン',
   }
 };

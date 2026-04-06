@@ -14,6 +14,7 @@ export interface Agent {
   tags?: string[];
   lastActive?: string;
   config?: Record<string, any>;
+  roomId?: string; // e.g., 'public', 'agent-1-office'
 }
 
 export interface Message {
@@ -56,7 +57,9 @@ export interface Skill {
   name: string;
   description: string;
   version: string;
+  category?: 'core' | 'tool' | 'plugin';
   enabled: boolean;
+  author?: string;
 }
 
 export interface LogEntry {

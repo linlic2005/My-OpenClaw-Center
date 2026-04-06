@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'ArkPixel';
+  src: url('/assets/star-office/fonts/ark-pixel-12px-proportional-zh_cn.ttf.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 400;
+  font-style: normal;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -55,6 +63,62 @@
   }
   body {
     @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))];
+    cursor: default;
+  }
+
+  #root,
+  #root * {
+    caret-color: transparent;
+  }
+
+  #root *:not(input):not(textarea):not(select):not(option):not([contenteditable='true']) {
+    cursor: default;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  button,
+  a,
+  [role='button'],
+  summary,
+  label,
+  button *,
+  a *,
+  [role='button'] *,
+  summary *,
+  label * {
+    cursor: pointer;
+  }
+
+  .cursor-pointer,
+  .cursor-pointer * {
+    cursor: pointer !important;
+  }
+
+  .cursor-grab,
+  .cursor-grab * {
+    cursor: grab !important;
+  }
+
+  .cursor-grabbing,
+  .cursor-grabbing * {
+    cursor: grabbing !important;
+  }
+
+  .cursor-not-allowed,
+  .cursor-not-allowed * {
+    cursor: not-allowed !important;
+  }
+
+  input,
+  textarea,
+  select,
+  option,
+  [contenteditable='true'] {
+    cursor: text;
+    -webkit-user-select: text;
+    user-select: text;
+    caret-color: auto;
   }
 }
 
@@ -71,4 +135,11 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-gray-400 dark:bg-gray-600;
+}
+
+.office-canvas-shell canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  image-rendering: pixelated;
 }

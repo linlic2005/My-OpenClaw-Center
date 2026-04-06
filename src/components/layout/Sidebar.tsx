@@ -61,7 +61,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-64 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col h-full">
+    <aside className="w-72 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col h-full">
       <div className="h-16 flex items-center px-6 border-b border-gray-200 dark:border-gray-800">
         <h1 className="font-bold tracking-tight text-lg text-primary">OpenClaw Console</h1>
       </div>

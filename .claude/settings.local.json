@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.openclaw.ac.cn)",
+      "Bash(cd:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(taskkill //F //IM node.exe)"
+    ]
+  }
+}

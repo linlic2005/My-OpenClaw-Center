@@ -4,9 +4,12 @@ import { clsx } from 'clsx';
 import { useAppStore, Language } from '@/stores/useAppStore';
 import { useNotificationStore } from '@/stores/useNotificationStore';
 import { translations } from '@/stores/i18n';
+import { apiClient } from '@/services/api-client';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
+  const [platformName, setPlatformName] = useState('OpenClaw Web Console');
+  const [streamModeEnabled, setStreamModeEnabled] = useState(true);
   const { language, setLanguage } = useAppStore();
   const t = (key: string) => translations[language][key] || key;
   const { addNotification } = useNotificationStore();
@@ -15,6 +18,20 @@ export default function Settings() {
     const newLang = e.target.value as Language;
     setLanguage(newLang);
     addNotification(`Language switched to ${newLang.toUpperCase()}`);
+  };
+
+  const handleSaveGeneral = async () => {
+    try {
+      await apiClient.put('/settings/general', {
+        platformName,
+        defaultLanguage: language,
+        streamMode: streamModeEnabled ? 'enabled' : 'disabled',
+      });
+      addNotification('Settings saved.');
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      addNotification('Failed to save settings.', 'error');
+    }
   };
 
   const tabs = [
@@ -63,7 +80,7 @@ export default function Settings() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <div className="space-y-2">
                       <label className="text-xs font-black uppercase text-gray-400 tracking-widest">{t('platform_name')}</label>
-                      <input type="text" defaultValue="OpenClaw Web Console" className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all" />
+                      <input value={platformName} onChange={(e) => setPlatformName(e.target.value)} type="text" className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all" />
                    </div>
                    <div className="space-y-2">
                       <label className="text-xs font-black uppercase text-gray-400 tracking-widest">{t('default_lang')}</label>
@@ -90,15 +107,25 @@ export default function Settings() {
                         <div className="font-bold text-sm">{t('stream_mode')}</div>
                         <div className="text-xs text-gray-500">{t('stream_desc')}</div>
                       </div>
-                      <div className="w-12 h-6 bg-primary rounded-full relative cursor-pointer">
-                        <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full" />
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setStreamModeEnabled((value) => !value)}
+                        className={clsx(
+                          "w-12 h-6 rounded-full relative transition-colors",
+                          streamModeEnabled ? "bg-primary" : "bg-gray-300 dark:bg-gray-700"
+                        )}
+                      >
+                        <div className={clsx(
+                          "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                          streamModeEnabled ? "right-1" : "left-1"
+                        )} />
+                      </button>
                    </div>
                 </div>
               </section>
 
               <div className="flex justify-end pt-4">
-                <button className="bg-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-primary/20 hover:opacity-90 active:scale-95 transition-all">
+                <button onClick={() => void handleSaveGeneral()} className="bg-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-primary/20 hover:opacity-90 active:scale-95 transition-all">
                   {t('save')}
                 </button>
               </div>
@@ -110,16 +137,16 @@ export default function Settings() {
               <h3 className="text-lg font-bold mb-4">{t('gateway_config')}</h3>
               <div className="p-4 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 rounded-2xl flex gap-3 text-blue-600 dark:text-blue-400 text-sm">
                  <Info size={20} className="shrink-0" />
-                 <p>These settings define how the console communicates with your OpenClaw Gateway instance.</p>
+                 <p>Gateway connectivity is managed server-side. This console should never expose the Gateway URL or operator token in the browser.</p>
               </div>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-xs font-black uppercase text-gray-400 tracking-widest">Gateway URL</label>
-                  <input type="text" placeholder="http://localhost:3000" className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3 text-sm font-mono outline-none" />
+                  <label className="text-xs font-black uppercase text-gray-400 tracking-widest">Gateway Access</label>
+                  <input type="text" value="Configured on server only" readOnly className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3 text-sm font-mono outline-none text-gray-500" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black uppercase text-gray-400 tracking-widest">Secret Token</label>
-                  <input type="password" value="************************" className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3 text-sm font-mono outline-none" />
+                  <label className="text-xs font-black uppercase text-gray-400 tracking-widest">Gateway Credentials</label>
+                  <input type="password" value="Stored in server environment" readOnly className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3 text-sm font-mono outline-none text-gray-500" />
                 </div>
               </div>
             </div>
